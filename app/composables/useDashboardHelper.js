@@ -1,3 +1,5 @@
+import { usePeClient } from './usePeClient';
+
 export const useDashboardHelper = () => {
   const client = usePeClient();
 

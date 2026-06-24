@@ -78,10 +78,15 @@
 </template>
 
 <script setup>
+import { useNotificationStore } from '~/stores/notifications';
+
 const store = useNotificationStore();
 
 const onOpen = async () => {
-  await store.fetchNotifications();
+  await Promise.all([
+    store.fetchNotifications(),
+    store.fetchUnreadCount({ force: true }),
+  ]);
 };
 
 const formatTime = (v) => {
@@ -97,16 +102,11 @@ const formatTime = (v) => {
   return d.toLocaleString();
 };
 
-// Keep the unread badge fresh.
-const POLL_INTERVAL_MS = 60_000;
-let pollHandle = null;
-
 onMounted(() => {
-  store.fetchUnreadCount();
-  pollHandle = setInterval(() => store.fetchUnreadCount(), POLL_INTERVAL_MS);
+  store.startUnreadListeners();
 });
 
 onBeforeUnmount(() => {
-  if (pollHandle) clearInterval(pollHandle);
+  store.stopUnreadListeners();
 });
 </script>

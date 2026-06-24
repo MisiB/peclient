@@ -15,9 +15,9 @@ export default defineNuxtConfig({
     plugins: [tailwindcss() as any],
   },
   css: ['~/assets/css/main.css'],
-  pinia:{
+  pinia: {
     storesDirs: ['./stores'],
-   },
+  },
   runtimeConfig: {
     public: {
       docmanBaseUrl: process.env.NUXT_PUBLIC_DOCMAN_BASE_URL || 'http://localhost:8001',

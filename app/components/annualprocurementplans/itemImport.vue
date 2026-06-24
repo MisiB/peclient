@@ -109,6 +109,8 @@
 </template>
 
 <script setup>
+import { usePeClient } from '~/composables/usePeClient';
+
 const props = defineProps({
   planUuid: { type: String, required: true },
 });
@@ -215,7 +217,7 @@ const pollOnce = async () => {
         // newly imported rows + totals + Issues badge update.
         await Promise.all([
           store.fetchPlan(props.planUuid),
-          store.fetchPlanItems(props.planUuid, { page: 1 }),
+          store.fetchGroupedItems(props.planUuid, { page: 1 }),
           store.fetchItemTotals(props.planUuid),
           store.fetchItemTotalsByGroup(props.planUuid),
           store.fetchItemTotalsByFlag(props.planUuid),

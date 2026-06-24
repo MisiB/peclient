@@ -1,3 +1,5 @@
+import { usePeClient } from './usePeClient';
+
 export const useNotificationHelper = () => {
   const client = usePeClient();
   const base = '/api/v1/notifications';

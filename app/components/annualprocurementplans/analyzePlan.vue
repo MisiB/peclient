@@ -317,6 +317,140 @@
             <Icon name="lucide:info" />
             <span>Resolve the Tier 1 issues above first — Tier 2 checks will run once the plan is structurally complete.</span>
           </section>
+
+          <!-- AI Compliance Review -->
+          <section class="card border border-base-200">
+            <div class="card-body">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-base-200 pb-2">
+                <span class="flex items-center gap-2 text-lg font-bold">
+                  <Icon name="lucide:sparkles" class="h-5 w-5 text-primary" />
+                  AI Compliance Review
+                </span>
+                <button
+                  class="btn btn-primary btn-sm"
+                  :disabled="store.complianceLoading || !store.complianceLawReady"
+                  @click="runCompliance"
+                >
+                  <span v-if="store.complianceLoading" class="loading loading-spinner loading-xs" />
+                  <Icon v-else name="lucide:scan-search" />
+                  {{ aiReport ? 'Re-run AI review' : 'Run AI review' }}
+                </button>
+              </div>
+
+              <div v-if="!store.complianceLawReady" role="alert" class="alert alert-warning mt-3 text-sm">
+                <Icon name="lucide:alert-triangle" />
+                <span>The procurement-law knowledge base is not indexed yet, so AI legal analysis is unavailable.</span>
+              </div>
+
+              <div v-else-if="store.complianceLoading" class="flex items-center justify-center gap-2 py-10 text-base-content/60">
+                <span class="loading loading-spinner loading-md" />
+                <span class="text-sm">Reviewing the plan against procurement law… this can take up to a minute.</span>
+              </div>
+
+              <div v-else-if="!aiReport" class="py-8 text-center text-sm text-base-content/60">
+                Run the AI review for a law-grounded compliance assessment and correction recommendations.
+              </div>
+
+              <div v-else class="mt-3 space-y-4">
+                <div role="alert" :class="['alert', aiDecisionClass]">
+                  <Icon :name="aiDecisionIcon" />
+                  <div>
+                    <p class="font-semibold">{{ aiDecisionLabel }}</p>
+                    <p v-if="aiReport.decision_rationale" class="text-sm">{{ aiReport.decision_rationale }}</p>
+                  </div>
+                </div>
+
+                <p v-if="aiReport.summary" class="text-sm text-base-content/80">{{ aiReport.summary }}</p>
+
+                <div v-if="aiReport.findings?.length" class="space-y-2">
+                  <div v-for="(f, i) in aiReport.findings" :key="i" class="rounded-lg border border-base-200 p-3">
+                    <div class="flex items-center gap-2">
+                      <span :class="['badge badge-sm', severityBadge(f.severity)]">{{ f.severity }}</span>
+                      <span v-if="f.area" class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ f.area }}</span>
+                    </div>
+                    <p class="mt-1.5 text-sm font-medium">{{ f.finding }}</p>
+                    <p v-if="f.recommendation" class="mt-1 flex items-start gap-1.5 text-sm text-base-content/70">
+                      <Icon name="lucide:wrench" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{{ f.recommendation }}</span>
+                    </p>
+                    <p v-if="f.legal_citation" class="mt-1 flex items-center gap-1 text-xs text-base-content/50">
+                      <Icon name="lucide:scale" class="h-3 w-3" />
+                      {{ f.legal_citation }}
+                    </p>
+                    <div v-if="f.references?.length" class="mt-1.5 flex flex-wrap items-center gap-1">
+                      <span class="text-xs text-base-content/50">Affected:</span>
+                      <span v-for="(r, ri) in f.references" :key="ri" class="badge badge-outline badge-xs font-mono">{{ r }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
+                  No legal compliance issues were flagged by the AI review.
+                </div>
+
+                <p v-if="aiReport.message" class="text-xs text-base-content/50">{{ aiReport.message }}</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Ask the AI (chat) -->
+          <section class="card border border-base-200">
+            <div class="card-body">
+              <div class="flex items-center gap-2 border-b border-base-200 pb-2">
+                <Icon name="lucide:message-circle" class="h-5 w-5 text-primary" />
+                <span class="text-lg font-bold">Ask the AI</span>
+                <span class="text-xs text-base-content/50">about this plan &amp; its issues</span>
+              </div>
+
+              <div ref="chatScroll" class="mt-3 max-h-80 space-y-3 overflow-y-auto">
+                <div v-if="!store.chatMessages.length && !store.chatLoading" class="py-6 text-center text-sm text-base-content/50">
+                  Ask a question about the plan or the issues raised above.
+                </div>
+                <div
+                  v-for="m in store.chatMessages"
+                  :key="m.id"
+                  class="flex"
+                  :class="m.role === 'user' ? 'justify-end' : 'justify-start'"
+                >
+                  <div
+                    class="max-w-[85%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm"
+                    :class="m.role === 'user' ? 'bg-primary text-primary-content' : 'bg-base-200'"
+                  >
+                    {{ m.content }}
+                  </div>
+                </div>
+                <div v-if="store.chatSending" class="flex justify-start">
+                  <div class="flex items-center gap-2 rounded-2xl bg-base-200 px-3 py-2 text-sm text-base-content/60">
+                    <span class="loading loading-dots loading-sm" /> AI is typing…
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!store.chatMessages.length" class="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  v-for="s in chatSuggestions"
+                  :key="s"
+                  type="button"
+                  class="badge badge-outline badge-sm cursor-pointer"
+                  @click="chatInput = s"
+                >
+                  {{ s }}
+                </button>
+              </div>
+
+              <div class="mt-3 flex items-end gap-2">
+                <textarea
+                  v-model="chatInput"
+                  rows="1"
+                  placeholder="Ask about the plan or an issue…"
+                  class="textarea textarea-bordered min-h-10 flex-1 resize-none"
+                  @keydown.enter.exact.prevent="sendChat"
+                />
+                <button class="btn btn-primary btn-sm" :disabled="store.chatSending || !chatInput.trim()" @click="sendChat">
+                  <Icon name="lucide:send" class="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div class="modal-action">
@@ -401,7 +535,64 @@ const onFixesFileSelected = async (event) => {
 const openModal = async () => {
   document.getElementById('analyze_plan_modal').showModal();
   if (!store.analysisReport) await store.runAnalysis(props.planUuid);
+  // Load any existing AI report + whether the law KB is indexed.
+  store.fetchComplianceAnalysis(props.planUuid);
+  store.fetchComplianceChat(props.planUuid);
 };
+
+// ─── Ask the AI (chat) ────────────────────────────────────────────────────
+const chatInput = ref('');
+const chatScroll = ref(null);
+const chatSuggestions = [
+  'Explain the issues raised',
+  'What should I fix first?',
+  'Which rows breach a threshold?',
+];
+
+const scrollChatToBottom = () => {
+  nextTick(() => {
+    if (chatScroll.value) chatScroll.value.scrollTop = chatScroll.value.scrollHeight;
+  });
+};
+
+watch(() => store.chatMessages.length, scrollChatToBottom);
+
+const sendChat = async () => {
+  const text = chatInput.value.trim();
+  if (!text || store.chatSending) return;
+  chatInput.value = '';
+  await store.sendComplianceChatMessage(props.planUuid, text);
+};
+
+// ─── AI compliance review ─────────────────────────────────────────────────
+const aiReport = computed(() => store.complianceReport?.ai ?? null);
+
+const runCompliance = () => store.runComplianceAnalysis(props.planUuid);
+
+const severityBadge = (s) => ({
+  critical: 'badge-error',
+  warning: 'badge-warning',
+  info: 'badge-info',
+})[s] ?? 'badge-ghost';
+
+const aiDecisionLabel = computed(() => {
+  const d = aiReport.value?.decision;
+  if (d === 'READY') return 'AI review: ready to submit';
+  if (d === 'NEEDS_CORRECTIONS') return 'AI review: corrections needed';
+  return 'AI review complete';
+});
+const aiDecisionClass = computed(() => {
+  const d = aiReport.value?.decision;
+  if (d === 'READY') return 'alert-success';
+  if (d === 'NEEDS_CORRECTIONS') return 'alert-warning';
+  return 'alert-info';
+});
+const aiDecisionIcon = computed(() => {
+  const d = aiReport.value?.decision;
+  if (d === 'READY') return 'lucide:check-circle';
+  if (d === 'NEEDS_CORRECTIONS') return 'lucide:alert-triangle';
+  return 'lucide:info';
+});
 
 const rerun = async () => {
   await store.runAnalysis(props.planUuid);

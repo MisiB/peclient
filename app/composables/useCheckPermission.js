@@ -45,6 +45,12 @@ export const useCheckPermission = (resource = null) => {
   /** True when the user holds can.delete.<resource> */
   const canDelete = computed(() => (resource ? can(`can.delete.${resource}`) : false))
 
+  /** True when the user holds can.review.<resource> */
+  const canReview = computed(() => (resource ? can(`can.review.${resource}`) : false))
+
+  /** True when the user holds can.approve.<resource> */
+  const canApprove = computed(() => (resource ? can(`can.approve.${resource}`) : false))
+
   // ── Internal helper ────────────────────────────────────────────────────────
 
   const denyPage = async (message = 'You do not have permission to access this page.') => {
@@ -145,6 +151,8 @@ export const useCheckPermission = (resource = null) => {
     canAdd,
     canEdit,
     canDelete,
+    canReview,
+    canApprove,
 
     // Page guards (async — redirect on failure)
     guardPage,

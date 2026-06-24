@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { useAnnualprocurementplanHelper } from '~/composables/useAnnualprocurementplanHelper';
 
 export const useAnnualprocurementplanStore = defineStore('annualprocurementplan', () => {
   const items = ref([]);
@@ -11,6 +12,14 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   const planItems = ref([]);
   const planItemsMeta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 50 });
   const planItemsLoading = ref(false);
+
+  // Plan items split into consolidated groups (rows sharing a reference_no)
+  // and standalone individual rows. Drives the Plan Items tab; consolidated
+  // groups arrive in full, only the individual list is paginated.
+  const groupedConsolidated = ref([]);
+  const groupedIndividual = ref([]);
+  const groupedIndividualMeta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 50 });
+  const groupedItemsLoading = ref(false);
 
   // Aggregates + unresolved summary, cached at the plan level so the totals
   // card and Issues badge stay accurate across paginated views.
@@ -33,6 +42,13 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   // Roles available for the plan's company — populates the role dropdown.
   const committeeRoles = ref([]);
 
+  // Procurement Management Unit (paginated members) + current member detail.
+  const pmuMembers = ref([]);
+  const pmuMembersMeta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 25 });
+  const pmuMembersLoading = ref(false);
+  const currentPmuMember = ref(null);
+  const pmuRoles = ref([]);
+
   // Required-document uploads for the currently-loaded plan.
   const planDocuments = ref([]);
   const planDocumentsLoading = ref(false);
@@ -40,6 +56,19 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   // Latest plan-analysis report (tier1 + tier2 + can_submit).
   const analysisReport = ref(null);
   const analysisLoading = ref(false);
+
+  // AI RAG compliance review (async; polled until COMPLETED/FAILED).
+  const complianceReport = ref(null);
+  const complianceStatus = ref(null);
+  const complianceLoading = ref(false);
+  const complianceLawReady = ref(true);
+  const complianceError = ref(null);
+  let compliancePollTimer = null;
+
+  // Chat with the RAG compliance assistant about the plan.
+  const chatMessages = ref([]);
+  const chatLoading = ref(false);
+  const chatSending = ref(false);
 
   const planInvoice = ref(null);
   const invoiceLoading = ref(false);
@@ -83,6 +112,12 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     updatePlan,
     deletePlan,
     getItems,
+    getGroupedItems,
+    setConsolidationName,
+    getComplianceAnalysis,
+    startComplianceAnalysis,
+    getComplianceChat,
+    sendComplianceChat,
     getItemTotals,
     getItemTotalsByGroup,
     getItemTotalsByFlag,
@@ -107,6 +142,18 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     createWorkhistory,
     updateWorkhistory,
     deleteWorkhistory,
+    getPmuRoles,
+    getPmuMembers,
+    getPmuMember,
+    createPmuMember,
+    updatePmuMember,
+    deletePmuMember,
+    createPmuQualification,
+    updatePmuQualification,
+    deletePmuQualification,
+    createPmuWorkhistory,
+    updatePmuWorkhistory,
+    deletePmuWorkhistory,
     getDisposalcommitteeRoles,
     getDisposalcommitteeMembers,
     createDisposalcommitteeMember,
@@ -229,6 +276,51 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     planItemsLoading.value = false;
   };
 
+  const fetchGroupedItems = async (uuid, opts = {}) => {
+    lastItemsOpts.value = { ...opts };
+    groupedItemsLoading.value = true;
+    const params = {
+      page: opts.page ?? groupedIndividualMeta.value.current_page ?? 1,
+      per_page: opts.per_page ?? groupedIndividualMeta.value.per_page ?? 50,
+    };
+    if (opts.search) params.search = opts.search;
+    const flagKeys = [
+      'pre_qualification', 'eoi', 'spoc',
+      'sustainable_procurement', 'affirmative_procurement', 'procurement_exemption',
+    ];
+    for (const k of flagKeys) {
+      if (opts[k]) params[k] = 1;
+    }
+    if (opts.consumption_mode) params.consumption_mode = opts.consumption_mode;
+    const { data, error } = await getGroupedItems(uuid, params);
+    if (!error.value) {
+      const payload = data.value?.data ?? {};
+      groupedConsolidated.value = payload.consolidated ?? [];
+      const individual = payload.individual ?? {};
+      groupedIndividual.value = individual.data ?? [];
+      groupedIndividualMeta.value = {
+        current_page: individual.current_page ?? 1,
+        last_page: individual.last_page ?? 1,
+        total: individual.total ?? 0,
+        per_page: individual.per_page ?? 50,
+      };
+    } else {
+      showError(error, 'Failed to fetch items.');
+    }
+    groupedItemsLoading.value = false;
+  };
+
+  const renameConsolidation = async (planUuid, referenceNo, name) => {
+    const { status, error } = await setConsolidationName(planUuid, referenceNo, name);
+    if (status?.value) {
+      showSuccess('Saved', 'Consolidation name updated.');
+      await fetchGroupedItems(planUuid, lastItemsOpts.value ?? {});
+      return true;
+    }
+    showError(error, 'Failed to update consolidation name.');
+    return false;
+  };
+
   // Build the query-string params the three totals endpoints accept. Mirrors
   // the filter shape fetchPlanItems uses so the cards always agree with the
   // visible row set.
@@ -300,6 +392,7 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     const opts = lastItemsOpts.value ?? {};
     await Promise.all([
       fetchPlanItems(planUuid, opts),
+      fetchGroupedItems(planUuid, opts),
       fetchItemTotals(planUuid, opts),
       fetchItemTotalsByGroup(planUuid, opts),
       fetchItemTotalsByFlag(planUuid, opts),
@@ -584,6 +677,150 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     return false;
   };
 
+  // ─── Procurement Management Unit (PMU) ───────────────────────────────────
+  const fetchPmuRoles = async (planUuid) => {
+    const { data, error } = await getPmuRoles(planUuid);
+    if (!error.value) pmuRoles.value = data.value?.data ?? [];
+  };
+
+  const fetchPmuMembers = async (planUuid, opts = {}) => {
+    pmuMembersLoading.value = true;
+    const params = {
+      page: opts.page ?? pmuMembersMeta.value.current_page ?? 1,
+      per_page: opts.per_page ?? pmuMembersMeta.value.per_page ?? 25,
+    };
+    if (opts.search) params.search = opts.search;
+    const { data, error } = await getPmuMembers(planUuid, params);
+    if (!error.value) {
+      const payload = data.value?.data ?? {};
+      pmuMembers.value = payload.data ?? [];
+      pmuMembersMeta.value = {
+        current_page: payload.current_page ?? 1,
+        last_page: payload.last_page ?? 1,
+        total: payload.total ?? 0,
+        per_page: payload.per_page ?? 25,
+      };
+    } else {
+      showError(error, 'Failed to fetch PMU members.');
+    }
+    pmuMembersLoading.value = false;
+  };
+
+  const fetchPmuMember = async (planUuid, memberUuid) => {
+    const { data, error } = await getPmuMember(planUuid, memberUuid);
+    if (error.value) return null;
+    currentPmuMember.value = data.value?.data ?? null;
+    return currentPmuMember.value;
+  };
+
+  const addPmuMember = async (planUuid, payload) => {
+    const { data: response, status, error } = await createPmuMember(planUuid, payload);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Member added', res.message);
+      await fetchPmuMembers(planUuid, { page: 1 });
+      return res.data ?? null;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to add member.');
+    return null;
+  };
+
+  const editPmuMember = async (planUuid, memberUuid, payload) => {
+    const { data: response, status, error } = await updatePmuMember(planUuid, memberUuid, payload);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Member updated', res.message);
+      await fetchPmuMembers(planUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to update member.');
+    return false;
+  };
+
+  const removePmuMember = async (planUuid, memberUuid) => {
+    const { data: response, status, error } = await deletePmuMember(planUuid, memberUuid);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Member removed', res.message);
+      await fetchPmuMembers(planUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to remove member.');
+    return false;
+  };
+
+  const addPmuQualification = async (planUuid, memberUuid, formData) => {
+    const { data: response, status, error } = await createPmuQualification(planUuid, memberUuid, formData);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Qualification added', res.message);
+      await fetchPmuMember(planUuid, memberUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to add qualification.');
+    return false;
+  };
+
+  const editPmuQualification = async (planUuid, memberUuid, qualUuid, formData) => {
+    const { data: response, status, error } = await updatePmuQualification(planUuid, memberUuid, qualUuid, formData);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Qualification updated', res.message);
+      await fetchPmuMember(planUuid, memberUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to update qualification.');
+    return false;
+  };
+
+  const removePmuQualification = async (planUuid, memberUuid, qualUuid) => {
+    const { data: response, status, error } = await deletePmuQualification(planUuid, memberUuid, qualUuid);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Qualification removed', res.message);
+      await fetchPmuMember(planUuid, memberUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to remove qualification.');
+    return false;
+  };
+
+  const addPmuWorkhistory = async (planUuid, memberUuid, payload) => {
+    const { data: response, status, error } = await createPmuWorkhistory(planUuid, memberUuid, payload);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Work history added', res.message);
+      await fetchPmuMember(planUuid, memberUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to add work history.');
+    return false;
+  };
+
+  const editPmuWorkhistory = async (planUuid, memberUuid, entryUuid, payload) => {
+    const { data: response, status, error } = await updatePmuWorkhistory(planUuid, memberUuid, entryUuid, payload);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Work history updated', res.message);
+      await fetchPmuMember(planUuid, memberUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to update work history.');
+    return false;
+  };
+
+  const removePmuWorkhistory = async (planUuid, memberUuid, entryUuid) => {
+    const { data: response, status, error } = await deletePmuWorkhistory(planUuid, memberUuid, entryUuid);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Work history removed', res.message);
+      await fetchPmuMember(planUuid, memberUuid);
+      return true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), 'Failed to remove work history.');
+    return false;
+  };
+
   // ─── Disposal committee ──────────────────────────────────────────────────
   const fetchDisposalCommitteeRoles = async (planUuid) => {
     const { data, error } = await getDisposalcommitteeRoles(planUuid);
@@ -696,6 +933,89 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     }
     analysisLoading.value = false;
     return analysisReport.value;
+  };
+
+  // ─── AI compliance review ───────────────────────────────────────────────
+  const stopCompliancePoll = () => {
+    if (compliancePollTimer) {
+      clearTimeout(compliancePollTimer);
+      compliancePollTimer = null;
+    }
+  };
+
+  const fetchComplianceAnalysis = async (planUuid) => {
+    const { data, error } = await getComplianceAnalysis(planUuid);
+    if (error.value) return null;
+    const payload = data.value?.data ?? {};
+    complianceReport.value = payload.report ?? null;
+    complianceStatus.value = payload.analysis_status ?? null;
+    complianceLawReady.value = payload.law_kb_ready ?? false;
+    complianceError.value = payload.analysis_error ?? null;
+    return payload;
+  };
+
+  const pollCompliance = (planUuid) => {
+    stopCompliancePoll();
+    compliancePollTimer = setTimeout(async () => {
+      const payload = await fetchComplianceAnalysis(planUuid);
+      if (payload?.analysis_status === 'PENDING') {
+        pollCompliance(planUuid);
+      } else {
+        complianceLoading.value = false;
+      }
+    }, 2500);
+  };
+
+  const runComplianceAnalysis = async (planUuid) => {
+    complianceLoading.value = true;
+    complianceReport.value = null;
+    complianceError.value = null;
+    const { data, status, error } = await startComplianceAnalysis(planUuid, { include_rag: true, async: true });
+    const res = data?.value?.data;
+    if (status?.value) {
+      complianceStatus.value = res?.analysis_status ?? 'PENDING';
+      if (res?.analysis_status === 'PENDING') {
+        pollCompliance(planUuid);
+      } else {
+        complianceReport.value = res?.report ?? null;
+        complianceLoading.value = false;
+      }
+      return true;
+    }
+    complianceLoading.value = false;
+    showError(error, 'Failed to run AI compliance review.');
+    return false;
+  };
+
+  const fetchComplianceChat = async (planUuid) => {
+    chatLoading.value = true;
+    const { data, error } = await getComplianceChat(planUuid);
+    if (!error.value) {
+      const payload = data.value?.data ?? {};
+      chatMessages.value = payload.messages ?? [];
+      complianceLawReady.value = payload.law_kb_ready ?? complianceLawReady.value;
+    }
+    chatLoading.value = false;
+  };
+
+  const sendComplianceChatMessage = async (planUuid, message) => {
+    const text = (message ?? '').trim();
+    if (!text || chatSending.value) return false;
+    // Optimistically show the user's message.
+    const optimistic = { id: `tmp-${Date.now()}`, role: 'user', content: text };
+    chatMessages.value = [...chatMessages.value, optimistic];
+    chatSending.value = true;
+    const { data, status, error } = await sendComplianceChat(planUuid, text);
+    chatSending.value = false;
+    if (status?.value) {
+      const reply = data?.value?.data?.message;
+      if (reply) chatMessages.value = [...chatMessages.value, reply];
+      return true;
+    }
+    // Roll back the optimistic message on failure.
+    chatMessages.value = chatMessages.value.filter((m) => m.id !== optimistic.id);
+    showError(error, 'Failed to get a reply from the assistant.');
+    return false;
   };
 
   /**
@@ -1098,6 +1418,10 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     planItems,
     planItemsMeta,
     planItemsLoading,
+    groupedConsolidated,
+    groupedIndividual,
+    groupedIndividualMeta,
+    groupedItemsLoading,
     itemTotals,
     itemTotalsByGroup,
     itemTotalsByFlag,
@@ -1111,6 +1435,11 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     committeeMembersLoading,
     currentMember,
     committeeRoles,
+    pmuMembers,
+    pmuMembersMeta,
+    pmuMembersLoading,
+    currentPmuMember,
+    pmuRoles,
     disposalCommitteeMembers,
     disposalCommitteeMembersMeta,
     disposalCommitteeMembersLoading,
@@ -1119,6 +1448,14 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     planDocumentsLoading,
     analysisReport,
     analysisLoading,
+    complianceReport,
+    complianceStatus,
+    complianceLoading,
+    complianceLawReady,
+    complianceError,
+    chatMessages,
+    chatLoading,
+    chatSending,
     planInvoice,
     invoiceLoading,
     invoiceSettling,
@@ -1144,6 +1481,8 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     fetchAll,
     fetchPlan,
     fetchPlanItems,
+    fetchGroupedItems,
+    renameConsolidation,
     fetchItemTotals,
     fetchItemTotalsByGroup,
     fetchItemTotalsByFlag,
@@ -1175,6 +1514,18 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     addWorkhistoryEntry,
     editWorkhistoryEntry,
     removeWorkhistoryEntry,
+    fetchPmuRoles,
+    fetchPmuMembers,
+    fetchPmuMember,
+    addPmuMember,
+    editPmuMember,
+    removePmuMember,
+    addPmuQualification,
+    editPmuQualification,
+    removePmuQualification,
+    addPmuWorkhistory,
+    editPmuWorkhistory,
+    removePmuWorkhistory,
     fetchDisposalCommitteeRoles,
     fetchDisposalCommitteeMembers,
     addDisposalCommitteeMember,
@@ -1184,6 +1535,10 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     uploadDocumentForPlan,
     removePlanDocument,
     runAnalysis,
+    fetchComplianceAnalysis,
+    runComplianceAnalysis,
+    fetchComplianceChat,
+    sendComplianceChatMessage,
     downloadIssuesExport,
     uploadIssuesFixes,
     fetchPlanInvoice,

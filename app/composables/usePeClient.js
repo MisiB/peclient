@@ -1,3 +1,6 @@
+import { navigateTo } from '#app';
+import { useSanctumAuth, useSanctumClient } from '#imports';
+
 /**
  * Wraps useSanctumClient() with automatic token-refresh-on-401 logic.
  *

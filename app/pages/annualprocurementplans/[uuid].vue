@@ -44,7 +44,7 @@ onMounted(async () => {
   if (!canAccess) return;
   await Promise.all([
     store.fetchPlan(planUuid.value),
-    store.fetchPlanItems(planUuid.value, { page: 1 }),
+    store.fetchGroupedItems(planUuid.value, { page: 1 }),
     store.fetchItemTotals(planUuid.value),
     store.fetchItemTotalsByGroup(planUuid.value),
     store.fetchItemTotalsByFlag(planUuid.value),

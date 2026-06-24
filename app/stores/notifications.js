@@ -1,4 +1,12 @@
 import { defineStore } from 'pinia';
+import { useNotificationHelper } from '~/composables/useNotificationHelper';
+
+/** Minimum ms between unread-count API calls (avoids bursts on focus/visibility). */
+const UNREAD_FETCH_THROTTLE_MS = 60_000;
+
+let fetchInFlight = false;
+let lastUnreadFetchAt = 0;
+let listenersAttached = false;
 
 export const useNotificationStore = defineStore('notifications', () => {
   const notifications = ref([]);
@@ -7,17 +15,58 @@ export const useNotificationStore = defineStore('notifications', () => {
 
   const { list, unreadCount, markRead, markActioned, markAllRead } = useNotificationHelper();
 
-  const fetchUnreadCount = async () => {
-    const { data } = await unreadCount();
-    unread.value = data.value?.data?.count ?? 0;
+  const fetchUnreadCount = async ({ force = false } = {}) => {
+    if (!process.client) return;
+
+    const now = Date.now();
+    if (fetchInFlight) return;
+    if (!force && lastUnreadFetchAt && now - lastUnreadFetchAt < UNREAD_FETCH_THROTTLE_MS) {
+      return;
+    }
+
+    fetchInFlight = true;
+    try {
+      const { data } = await unreadCount();
+      unread.value = data.value?.data?.count ?? 0;
+      lastUnreadFetchAt = Date.now();
+    } finally {
+      fetchInFlight = false;
+    }
+  };
+
+  const onWindowFocus = () => {
+    if (document.visibilityState === 'visible') {
+      fetchUnreadCount();
+    }
+  };
+
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      fetchUnreadCount();
+    }
+  };
+
+  /** Call from the bell when it mounts (layout navbar). */
+  const startUnreadListeners = () => {
+    if (!process.client || listenersAttached) return;
+    listenersAttached = true;
+    fetchUnreadCount({ force: true });
+    window.addEventListener('focus', onWindowFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  };
+
+  /** Call from the bell when it unmounts. */
+  const stopUnreadListeners = () => {
+    if (!process.client || !listenersAttached) return;
+    listenersAttached = false;
+    window.removeEventListener('focus', onWindowFocus);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 
   const fetchNotifications = async (params = {}) => {
     loading.value = true;
     const { data } = await list({ per_page: 25, ...params });
     const raw = data.value;
-    // Diagnostic — remove once notifications render.
-    console.log('[notifications.fetchNotifications] raw response:', raw);
     const payload = raw?.data;
     let items = [];
     if (Array.isArray(payload)) {
@@ -34,7 +83,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     if (status?.value) {
       const item = notifications.value.find((n) => n.id === id);
       if (item) item.read_at = item.read_at ?? new Date().toISOString();
-      await fetchUnreadCount();
+      await fetchUnreadCount({ force: true });
     }
   };
 
@@ -46,7 +95,7 @@ export const useNotificationStore = defineStore('notifications', () => {
         item.actioned_at = new Date().toISOString();
         item.read_at = item.read_at ?? item.actioned_at;
       }
-      await fetchUnreadCount();
+      await fetchUnreadCount({ force: true });
     }
   };
 
@@ -57,6 +106,7 @@ export const useNotificationStore = defineStore('notifications', () => {
         n.read_at = n.read_at ?? new Date().toISOString();
       });
       unread.value = 0;
+      lastUnreadFetchAt = Date.now();
     }
   };
 
@@ -66,6 +116,8 @@ export const useNotificationStore = defineStore('notifications', () => {
     loading,
     fetchUnreadCount,
     fetchNotifications,
+    startUnreadListeners,
+    stopUnreadListeners,
     markAsRead,
     markAsActioned,
     markEverythingRead,

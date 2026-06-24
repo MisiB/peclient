@@ -77,14 +77,7 @@
     </section>
 
     <!-- Coming soon -->
-    <section class="card bg-base-100 shadow-sm border border-base-200">
-      <div class="card-body">
-        <ComingSoon
-          title="Tender management"
-          description="Create, publish, evaluate and award tenders. Coming soon."
-        />
-      </div>
-    </section>
+    <TendersWidget />
   </div>
 </template>
 

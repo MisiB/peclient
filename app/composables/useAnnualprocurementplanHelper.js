@@ -1,3 +1,5 @@
+import { usePeClient } from './usePeClient';
+
 export const useAnnualprocurementplanHelper = () => {
   const client = usePeClient();
 
@@ -61,6 +63,73 @@ export const useAnnualprocurementplanHelper = () => {
       return { data: ref(data), error: ref(null) };
     } catch (err) {
       return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  // Items split into consolidated groups (rows sharing a reference_no) and
+  // standalone individual rows. Accepts the same filter params as getItems.
+  const getGroupedItems = async (planUuid, params = {}) => {
+    try {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') qs.set(k, v);
+      }
+      const url = `${base}/${planUuid}/items/grouped${qs.toString() ? `?${qs}` : ''}`;
+      const data = await client(url, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  // ─── AI compliance review ───────────────────────────────────────────────
+  const getComplianceAnalysis = async (planUuid) => {
+    try {
+      const data = await client(`${base}/${planUuid}/compliance-analysis`, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const startComplianceAnalysis = async (planUuid, payload = {}) => {
+    try {
+      const data = await client(`${base}/${planUuid}/compliance-analysis/run`, { method: 'POST', body: payload });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const getComplianceChat = async (planUuid) => {
+    try {
+      const data = await client(`${base}/${planUuid}/compliance-chat`, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const sendComplianceChat = async (planUuid, message) => {
+    try {
+      const data = await client(`${base}/${planUuid}/compliance-chat`, { method: 'POST', body: { message } });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  // Set or clear a consolidation group's custom name. A blank name reverts to
+  // the auto-derived one.
+  const setConsolidationName = async (planUuid, referenceNo, name) => {
+    try {
+      const data = await client(`${base}/${planUuid}/consolidation-name`, {
+        method: 'PUT',
+        body: { reference_no: referenceNo, name },
+      });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
     }
   };
 
@@ -581,6 +650,122 @@ export const useAnnualprocurementplanHelper = () => {
     }
   };
 
+  // ─── Procurement Management Unit (PMU) ──────────────────────────────────
+  const pmuBase = (planUuid) => `${base}/${planUuid}/procurement-management-unit`;
+
+  const getPmuRoles = async (planUuid) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/roles`, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const getPmuMembers = async (planUuid, params = {}) => {
+    try {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') qs.set(k, v);
+      }
+      const url = `${pmuBase(planUuid)}${qs.toString() ? `?${qs}` : ''}`;
+      const data = await client(url, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const getPmuMember = async (planUuid, memberUuid) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}`, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const createPmuMember = async (planUuid, payload) => {
+    try {
+      const data = await client(pmuBase(planUuid), { method: 'POST', body: payload });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const updatePmuMember = async (planUuid, memberUuid, payload) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}`, { method: 'PUT', body: payload });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const deletePmuMember = async (planUuid, memberUuid) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}`, { method: 'DELETE' });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const createPmuQualification = async (planUuid, memberUuid, formData) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}/qualifications`, { method: 'POST', body: formData });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const updatePmuQualification = async (planUuid, memberUuid, qualUuid, formData) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}/qualifications/${qualUuid}`, { method: 'POST', body: formData });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const deletePmuQualification = async (planUuid, memberUuid, qualUuid) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}/qualifications/${qualUuid}`, { method: 'DELETE' });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const createPmuWorkhistory = async (planUuid, memberUuid, payload) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}/workhistory`, { method: 'POST', body: payload });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const updatePmuWorkhistory = async (planUuid, memberUuid, entryUuid, payload) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}/workhistory/${entryUuid}`, { method: 'PUT', body: payload });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const deletePmuWorkhistory = async (planUuid, memberUuid, entryUuid) => {
+    try {
+      const data = await client(`${pmuBase(planUuid)}/${memberUuid}/workhistory/${entryUuid}`, { method: 'DELETE' });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
   // ─── Disposal committee ─────────────────────────────────────────────────
   const dcBase = (planUuid) => `${base}/${planUuid}/disposal-committee`;
 
@@ -815,6 +1000,12 @@ export const useAnnualprocurementplanHelper = () => {
     updatePlan,
     deletePlan,
     getItems,
+    getGroupedItems,
+    setConsolidationName,
+    getComplianceAnalysis,
+    startComplianceAnalysis,
+    getComplianceChat,
+    sendComplianceChat,
     getItemTotals,
     getItemTotalsByGroup,
     getItemTotalsByFlag,
@@ -839,6 +1030,18 @@ export const useAnnualprocurementplanHelper = () => {
     createWorkhistory,
     updateWorkhistory,
     deleteWorkhistory,
+    getPmuRoles,
+    getPmuMembers,
+    getPmuMember,
+    createPmuMember,
+    updatePmuMember,
+    deletePmuMember,
+    createPmuQualification,
+    updatePmuQualification,
+    deletePmuQualification,
+    createPmuWorkhistory,
+    updatePmuWorkhistory,
+    deletePmuWorkhistory,
     getDisposalcommitteeRoles,
     getDisposalcommitteeMembers,
     createDisposalcommitteeMember,

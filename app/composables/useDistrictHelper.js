@@ -1,3 +1,5 @@
+import { usePeClient } from './usePeClient';
+
 export const useDistrictHelper = () => {
   const client = usePeClient();
 

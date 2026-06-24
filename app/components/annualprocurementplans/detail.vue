@@ -1,37 +1,36 @@
 <template>
-  <div class="mt-3 space-y-3">
-    <!-- Header -->
-    <div class="card border border-base-200">
-      <div class="card-body">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-2xl font-bold">
-              {{ plan?.year ?? '...' }}
-              <span class="text-base-content/60 font-normal">·</span>
-              {{ plan?.company?.name ?? '' }}
-            </h2>
-            <div class="mt-2 space-y-1 text-sm">
-              <div class="flex items-center gap-2">
-                <span class="w-20 text-xs uppercase tracking-wide text-base-content/60">Approval</span>
-                <span :class="['badge', statusBadge(plan?.status)]">{{ formatStatus(plan?.status) }}</span>
-              </div>
-              <div v-if="plan?.paymentstatus" class="flex items-center gap-2">
-                <span class="w-20 text-xs uppercase tracking-wide text-base-content/60">Payment</span>
-                <span :class="['badge', paymentStatusBadge(plan?.paymentstatus)]">
-                  {{ formatPaymentStatus(plan?.paymentstatus) }}
-                </span>
-              </div>
-              <div v-if="plan?.currency" class="flex items-center gap-2">
-                <span class="w-20 text-xs uppercase tracking-wide text-base-content/60">Currency</span>
-                <span class="badge badge-outline">
-                  {{ plan.currency.code }}<template v-if="plan.currency.symbol"> {{ plan.currency.symbol }}</template>
-                </span>
-              </div>
+  <div class="mt-3 space-y-4">
+    <!-- Header / hero -->
+    <div class="relative overflow-hidden rounded-2xl border border-base-200 bg-gradient-to-br from-primary/10 via-base-100 to-base-100 shadow-sm">
+      <div class="absolute inset-y-0 left-0 w-1.5 bg-primary"></div>
+      <div class="p-5 sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
+              <Icon name="lucide:clipboard-list" class="h-4 w-4" />
+              Annual Procurement Plan
             </div>
-            <div class="mt-2 text-sm text-base-content/60">
-              Annual procurement plan · {{ totalItems }} item{{ totalItems === 1 ? '' : 's' }}
+            <h1 class="mt-1 flex flex-wrap items-baseline gap-x-3 text-3xl font-bold tracking-tight">
+              <span>{{ plan?.year ?? '…' }}</span>
+              <span class="text-base-content/25">/</span>
+              <span class="text-base-content/80">{{ plan?.company?.name ?? '' }}</span>
+            </h1>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <span :class="['badge badge-lg gap-1.5', statusBadge(plan?.status)]">
+                <Icon name="lucide:circle-dot" class="h-3.5 w-3.5" />
+                {{ formatStatus(plan?.status) }}
+              </span>
+              <span v-if="plan?.paymentstatus" :class="['badge badge-lg gap-1.5', paymentStatusBadge(plan?.paymentstatus)]">
+                <Icon name="lucide:credit-card" class="h-3.5 w-3.5" />
+                {{ formatPaymentStatus(plan?.paymentstatus) }}
+              </span>
+              <span v-if="plan?.currency" class="badge badge-lg badge-outline gap-1.5">
+                <Icon name="lucide:coins" class="h-3.5 w-3.5" />
+                {{ plan.currency.code }}<template v-if="plan.currency.symbol"> · {{ plan.currency.symbol }}</template>
+              </span>
             </div>
-            <div v-if="plan?.submitted_at" class="mt-1 text-xs text-base-content/60">
+            <div v-if="plan?.submitted_at" class="mt-3 flex items-center gap-1.5 text-xs text-base-content/50">
+              <Icon name="lucide:send" class="h-3.5 w-3.5" />
               Submitted by {{ plan.submitted_by_user?.name || plan.submittedBy?.name || '—' }}
               on {{ formatDateTime(plan.submitted_at) }}
             </div>
@@ -42,13 +41,44 @@
             <AnnualprocurementplansWorkflowActions :plan-uuid="planUuid" />
           </div>
         </div>
+
+        <!-- Stat strip -->
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
+              <Icon name="lucide:wallet" class="h-4 w-4" /> Total Budget
+            </div>
+            <div class="mt-1 truncate font-mono text-xl font-bold" :title="formatAmount(planTotal)">
+              <span class="text-sm text-base-content/50">{{ currencySymbol }}</span>{{ formatAmount(planTotal) }}
+            </div>
+          </div>
+          <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
+              <Icon name="lucide:list" class="h-4 w-4" /> Plan Items
+            </div>
+            <div class="mt-1 text-xl font-bold">{{ totalItems }}</div>
+          </div>
+          <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
+              <Icon name="lucide:layers" class="h-4 w-4" /> Consolidated
+            </div>
+            <div class="mt-1 text-xl font-bold">{{ store.groupedConsolidated.length }}</div>
+          </div>
+          <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
+              <Icon name="lucide:alert-triangle" class="h-4 w-4" /> Issues
+            </div>
+            <div class="mt-1 text-xl font-bold" :class="unresolvedCount > 0 ? 'text-warning' : 'text-success'">{{ unresolvedCount }}</div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Tabs + active tab content -->
-    <div class="card border border-base-200">
-      <div class="card-body">
-        <div role="tablist" class="tabs tabs-border">
+    <div class="card overflow-hidden rounded-2xl border border-base-200 shadow-sm">
+      <div class="card-body p-0">
+        <div class="sticky top-0 z-20 overflow-x-auto border-b border-base-200 bg-base-100/90 backdrop-blur">
+          <div role="tablist" class="tabs tabs-border min-w-max px-3 pt-1">
           <button
             role="tab"
             class="tab"
@@ -94,6 +124,16 @@
           <button
             role="tab"
             class="tab"
+            :class="{ 'tab-active': activeTab === 'pmu' }"
+            @click="activeTab = 'pmu'"
+          >
+            <Icon name="lucide:building-2" class="mr-1" />
+            Procurement Management Unit
+            <span class="badge badge-sm ml-2">{{ store.pmuMembersMeta.total }}</span>
+          </button>
+          <button
+            role="tab"
+            class="tab"
             :class="{ 'tab-active': activeTab === 'disposalcommittee' }"
             @click="activeTab = 'disposalcommittee'"
           >
@@ -121,8 +161,10 @@
             Workflow History
             <span class="badge badge-sm ml-2">{{ peTransitions.length }}</span>
           </button>
+          </div>
         </div>
 
+        <div class="space-y-4 p-4 sm:p-5">
         <!-- Plan Items -->
         <div v-if="activeTab === 'items'">
           <div class="mt-3 flex justify-end gap-2">
@@ -131,109 +173,47 @@
           </div>
 
           <!-- Totals by procurement method / group / flags -->
-          <div v-if="store.itemTotals.length || store.itemTotalsByGroup.length || store.itemTotalsByFlag.length" class="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            <div v-if="store.itemTotals.length" class="rounded border border-base-200">
-              <div class="flex items-center justify-between border-b border-base-200 bg-base-200/40 px-3 py-2">
-                <div class="text-sm font-semibold">Totals by Procurement Method</div>
-                <div class="text-xs text-base-content/60">{{ totalItems }} item{{ totalItems === 1 ? '' : 's' }}</div>
-              </div>
-              <table class="table table-sm w-full">
-                <thead>
-                  <tr>
-                    <th>Method</th>
-                    <th class="text-right">Items</th>
-                    <th class="text-right">Total Cost</th>
-                    <th class="text-right">% of Plan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in store.itemTotals" :key="row.key">
-                    <td>
-                      <span v-if="row.unresolved" class="text-warning">{{ row.label }}</span>
-                      <span v-else>{{ row.label }}</span>
-                    </td>
-                    <td class="text-right">{{ row.count }}</td>
-                    <td class="text-right font-mono">{{ formatAmount(row.total) }}</td>
-                    <td class="text-right">{{ planTotal > 0 ? ((row.total / planTotal) * 100).toFixed(1) + '%' : '—' }}</td>
-                  </tr>
-                </tbody>
-                <tfoot>
-                  <tr class="font-semibold">
-                    <td>Total</td>
-                    <td class="text-right">{{ totalItems }}</td>
-                    <td class="text-right font-mono">{{ formatAmount(planTotal) }}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            <div v-if="store.itemTotalsByGroup.length" class="rounded border border-base-200">
-              <div class="flex items-center justify-between border-b border-base-200 bg-base-200/40 px-3 py-2">
-                <div class="text-sm font-semibold">Totals by Procurement Group</div>
-                <div class="text-xs text-base-content/60">{{ totalItems }} item{{ totalItems === 1 ? '' : 's' }}</div>
-              </div>
-              <table class="table table-sm w-full">
-                <thead>
-                  <tr>
-                    <th>Group</th>
-                    <th class="text-right">Items</th>
-                    <th class="text-right">Total Cost</th>
-                    <th class="text-right">% of Plan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in store.itemTotalsByGroup" :key="row.key">
-                    <td>
-                      <span v-if="row.unresolved" class="text-warning">{{ row.label }}</span>
-                      <span v-else>{{ row.label }}</span>
-                    </td>
-                    <td class="text-right">{{ row.count }}</td>
-                    <td class="text-right font-mono">{{ formatAmount(row.total) }}</td>
-                    <td class="text-right">{{ planGroupTotal > 0 ? ((row.total / planGroupTotal) * 100).toFixed(1) + '%' : '—' }}</td>
-                  </tr>
-                </tbody>
-                <tfoot>
-                  <tr class="font-semibold">
-                    <td>Total</td>
-                    <td class="text-right">{{ totalItems }}</td>
-                    <td class="text-right font-mono">{{ formatAmount(planGroupTotal) }}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            <div v-if="store.itemTotalsByFlag.length" class="rounded border border-base-200">
-              <div class="flex items-center justify-between border-b border-base-200 bg-base-200/40 px-3 py-2">
-                <div class="text-sm font-semibold">Totals by Flag</div>
-                <div class="text-xs text-base-content/60">{{ totalItems }} item{{ totalItems === 1 ? '' : 's' }}</div>
-              </div>
-              <table class="table table-sm w-full">
-                <thead>
-                  <tr>
-                    <th>Flag</th>
-                    <th class="text-right">Items</th>
-                    <th class="text-right">Total Cost</th>
-                    <th class="text-right">% of Plan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in store.itemTotalsByFlag" :key="row.key">
-                    <td>{{ row.label }}</td>
-                    <td class="text-right">{{ row.count }}</td>
-                    <td class="text-right font-mono">{{ formatAmount(row.total) }}</td>
-                    <td class="text-right">{{ planTotal > 0 ? ((row.total / planTotal) * 100).toFixed(1) + '%' : '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div v-if="store.itemTotals.length || store.itemTotalsByGroup.length || store.itemTotalsByFlag.length" class="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            <AnnualprocurementplansTotalsBars
+              v-if="store.itemTotals.length"
+              title="Totals by Procurement Method"
+              icon="lucide:gavel"
+              accent="primary"
+              :rows="store.itemTotals"
+              :denominator="planTotal"
+              :total-items="totalItems"
+              :grand-total="planTotal"
+              show-footer
+            />
+            <AnnualprocurementplansTotalsBars
+              v-if="store.itemTotalsByGroup.length"
+              title="Totals by Procurement Group"
+              icon="lucide:boxes"
+              accent="secondary"
+              :rows="store.itemTotalsByGroup"
+              :denominator="planGroupTotal"
+              :total-items="totalItems"
+              :grand-total="planGroupTotal"
+              show-footer
+            />
+            <AnnualprocurementplansTotalsBars
+              v-if="store.itemTotalsByFlag.length"
+              title="Totals by Flag"
+              icon="lucide:flag"
+              accent="accent"
+              :rows="store.itemTotalsByFlag"
+              :denominator="planTotal"
+              :total-items="totalItems"
+            />
           </div>
-          <div class="card mt-3 border border-base-200">
+          <div class="card mt-4 rounded-xl border border-base-200 shadow-sm">
             <div class="card-body">
-              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-base-200 pb-2">
-                <span class="text-lg font-bold">Plan Items</span>
-                <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-base-200 pb-3">
+                <span class="flex items-center gap-2 text-lg font-bold">
+                  <Icon name="lucide:list-checks" class="h-5 w-5 text-primary" />
+                  Plan Items
+                </span>
+                <div class="flex flex-wrap items-center gap-2">
                   <input
                     v-model="itemsSearch"
                     type="text"
@@ -241,6 +221,13 @@
                     class="input input-bordered input-sm w-56"
                     @input="onSearchInput"
                   />
+
+                  <button type="button" class="btn btn-outline btn-sm gap-1.5" @click="openFilters">
+                    <Icon name="lucide:filter" class="h-4 w-4" />
+                    Filters
+                    <span v-if="activeFilterCount > 0" class="badge badge-primary badge-xs">{{ activeFilterCount }}</span>
+                  </button>
+
                   <select v-model.number="itemsPerPage" class="select select-bordered select-sm" @change="changePerPage">
                     <option :value="25">25 / page</option>
                     <option :value="50">50 / page</option>
@@ -250,154 +237,190 @@
                 </div>
               </div>
 
-              <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                <span class="text-xs text-base-content/60 mr-1">Filter:</span>
-                <button
-                  v-for="f in FILTER_FLAGS"
-                  :key="f.key"
-                  type="button"
-                  :class="['badge badge-sm gap-1 cursor-pointer select-none', itemsFilters[f.key] ? 'badge-primary' : 'badge-outline']"
-                  @click="toggleFlagFilter(f.key)"
-                >
-                  <Icon v-if="itemsFilters[f.key]" name="lucide:check" class="h-3 w-3" />
-                  {{ f.label }}
-                </button>
-                <select
-                  v-model="itemsFilters.consumption_mode"
-                  class="select select-bordered select-xs ml-2"
-                  @change="onConsumptionModeChange"
-                >
-                  <option value="">Mode: any</option>
-                  <option value="ONCE_OFF">Once off</option>
-                  <option value="DRILL_DOWN">Drill down</option>
-                </select>
-                <button
-                  v-if="activeFilterCount > 0"
-                  type="button"
-                  class="btn btn-ghost btn-xs ml-1"
-                  @click="clearItemsFilters"
-                >
-                  <Icon name="lucide:x" class="h-3 w-3" /> Clear ({{ activeFilterCount }})
-                </button>
-              </div>
+              <!-- Filters dialog -->
+              <dialog ref="filtersDialog" class="modal">
+                <div class="modal-box max-w-md">
+                  <div class="flex items-center justify-between">
+                    <h3 class="flex items-center gap-2 text-lg font-bold">
+                      <Icon name="lucide:filter" class="h-5 w-5 text-primary" />
+                      Filters
+                    </h3>
+                    <button type="button" class="btn btn-circle btn-ghost btn-sm" @click="closeFilters">
+                      <Icon name="lucide:x" class="h-4 w-4" />
+                    </button>
+                  </div>
 
-              <div v-if="store.planItemsLoading" class="flex justify-center py-10">
+                  <div class="mt-4 space-y-4">
+                    <div>
+                      <div class="mb-1.5 text-sm font-semibold">Procurement flags</div>
+                      <div class="grid grid-cols-2 gap-1">
+                        <label
+                          v-for="f in FILTER_FLAGS"
+                          :key="f.key"
+                          class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-base-200"
+                        >
+                          <input
+                            type="checkbox"
+                            class="checkbox checkbox-sm"
+                            :checked="itemsFilters[f.key]"
+                            @change="toggleFlagFilter(f.key)"
+                          />
+                          <span class="text-sm">{{ f.label }}</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div class="mb-1.5 text-sm font-semibold">Consumption mode</div>
+                      <select
+                        v-model="itemsFilters.consumption_mode"
+                        class="select select-bordered select-sm w-full"
+                        @change="onConsumptionModeChange"
+                      >
+                        <option value="">Any</option>
+                        <option value="ONCE_OFF">Once off</option>
+                        <option value="DRILL_DOWN">Drill down</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="modal-action">
+                    <button
+                      v-if="activeFilterCount > 0"
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      @click="clearItemsFilters"
+                    >
+                      <Icon name="lucide:x" class="h-3 w-3" /> Clear all
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" @click="closeFilters">Done</button>
+                  </div>
+                </div>
+                <form method="dialog" class="modal-backdrop">
+                  <button type="button" @click="closeFilters">close</button>
+                </form>
+              </dialog>
+
+              <div v-if="store.groupedItemsLoading" class="flex justify-center py-10">
                 <span class="loading loading-spinner loading-lg"></span>
               </div>
 
-              <div v-else class="overflow-x-auto">
-                <table class="table table-zebra mt-3 w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Ref</th>
-                      <th>Description</th>
-                      <th>Group</th>
-                      <th>Method</th>
-                      <th>Quarter</th>
-                      <th>Mode</th>
-                      <th class="text-right">Qty</th>
-                      <th class="text-right">Unit Cost</th>
-                      <th class="text-right">Total</th>
-                      <th class="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-if="!store.planItems.length">
-                      <td colspan="11" class="text-center text-base-content/50">
-                        {{ (itemsSearch || activeFilterCount > 0)
-                          ? 'No items match the current search / filters.'
-                          : 'No items yet. Add an item to start building the plan.' }}
-                      </td>
-                    </tr>
-                    <tr
-                      v-for="(it, i) in store.planItems"
-                      :key="it.id"
-                      :class="{ 'bg-warning/10': hasUnresolved(it) }"
+              <template v-else>
+                <!-- Sub-tabs: consolidated groups vs individual rows. -->
+                <div class="mt-3">
+                  <div role="tablist" class="tabs tabs-box tabs-sm inline-flex bg-base-200/60">
+                    <button
+                      role="tab"
+                      type="button"
+                      class="tab gap-1.5"
+                      :class="{ 'tab-active': effectiveItemsView === 'consolidated' }"
+                      :disabled="!store.groupedConsolidated.length"
+                      @click="itemsView = 'consolidated'"
                     >
-                      <td>
-                        {{ rowNumber(i) }}
-                        <Icon
-                          v-if="hasUnresolved(it)"
-                          name="lucide:alert-triangle"
-                          class="ml-1 text-warning"
-                          :title="'Has unresolved values — see Issues tab'"
-                        />
-                      </td>
-                      <td class="font-mono text-xs">{{ it.reference_no || '—' }}</td>
-                      <td class="max-w-xs truncate" :title="it.description">{{ it.description }}</td>
-                      <td>{{ it.procurementgroup?.name || (it.raw_procurementgroup_code ? `"${it.raw_procurementgroup_code}" (unresolved)` : '—') }}</td>
-                      <td>{{ it.procurementmethod?.name || (it.raw_procurementmethod_code ? `"${it.raw_procurementmethod_code}" (unresolved)` : '—') }}</td>
-                      <td>{{ it.quarter || '—' }}</td>
-                      <td>
-                        <span
-                          v-if="it.consumption_mode"
-                          :class="['badge badge-sm', it.consumption_mode === 'DRILL_DOWN' ? 'badge-warning' : 'badge-ghost']"
-                          :title="it.consumption_mode === 'DRILL_DOWN'
-                            ? 'Budget drawn down across multiple procurements'
-                            : 'Whole budget used in a single procurement'"
-                        >
-                          {{ it.consumption_mode === 'DRILL_DOWN' ? 'Drill down' : 'Once off' }}
-                        </span>
-                        <span v-else class="text-base-content/40">—</span>
-                      </td>
-                      <td class="text-right font-mono">{{ formatAmount(it.quantity) }}</td>
-                      <td class="text-right font-mono">{{ formatAmount(it.unit_cost) }}</td>
-                      <td class="text-right font-mono">{{ formatAmount(it.total_cost) }}</td>
-                      <td class="text-right">
-                        <div class="flex justify-end gap-1">
-                          <AnnualprocurementplansItemView :item="it" />
-                          <AnnualprocurementplansItemEdit v-if="canEdit && canEditPlan" :plan-uuid="planUuid" :item="it" />
-                          <AnnualprocurementplansItemDelete v-if="canDelete && canEditPlan" :plan-uuid="planUuid" :item="it" />
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                      <Icon name="lucide:layers" class="h-4 w-4" />
+                      Consolidated
+                      <span class="badge badge-xs">{{ store.groupedConsolidated.length }}</span>
+                    </button>
+                    <button
+                      role="tab"
+                      type="button"
+                      class="tab gap-1.5"
+                      :class="{ 'tab-active': effectiveItemsView === 'individual' }"
+                      @click="itemsView = 'individual'"
+                    >
+                      <Icon name="lucide:list" class="h-4 w-4" />
+                      Individual
+                      <span class="badge badge-xs">{{ store.groupedIndividualMeta.total }}</span>
+                    </button>
+                  </div>
+                </div>
 
-              <!-- Pagination -->
-              <div v-if="store.planItemsMeta.last_page > 1" class="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <div class="text-xs text-base-content/60">
-                  Page {{ store.planItemsMeta.current_page }} of {{ store.planItemsMeta.last_page }}
-                  · {{ store.planItemsMeta.total }} total
+                <!-- Consolidated items: rows sharing a reference number, shown
+                     as one collapsible line carrying only the total qty/budget;
+                     unit prices live on the children when drilled down. -->
+                <div v-if="effectiveItemsView === 'consolidated'" class="mt-3 space-y-2">
+                  <AnnualprocurementplansConsolidatedRow
+                    v-for="grp in store.groupedConsolidated"
+                    :key="grp.reference_no"
+                    :group="grp"
+                    :plan-uuid="planUuid"
+                    :currency="currencySymbol"
+                    :can-edit="canEdit"
+                    :can-delete="canDelete"
+                    :can-edit-plan="canEditPlan"
+                  />
                 </div>
-                <div class="join">
-                  <button
-                    class="btn btn-sm join-item"
-                    :disabled="store.planItemsMeta.current_page <= 1 || store.planItemsLoading"
-                    @click="goToPage(1)"
-                  >
-                    <Icon name="lucide:chevrons-left" />
-                  </button>
-                  <button
-                    class="btn btn-sm join-item"
-                    :disabled="store.planItemsMeta.current_page <= 1 || store.planItemsLoading"
-                    @click="goToPage(store.planItemsMeta.current_page - 1)"
-                  >
-                    <Icon name="lucide:chevron-left" />
-                    Prev
-                  </button>
-                  <button class="btn btn-sm join-item btn-disabled">
-                    {{ store.planItemsMeta.current_page }}
-                  </button>
-                  <button
-                    class="btn btn-sm join-item"
-                    :disabled="store.planItemsMeta.current_page >= store.planItemsMeta.last_page || store.planItemsLoading"
-                    @click="goToPage(store.planItemsMeta.current_page + 1)"
-                  >
-                    Next
-                    <Icon name="lucide:chevron-right" />
-                  </button>
-                  <button
-                    class="btn btn-sm join-item"
-                    :disabled="store.planItemsMeta.current_page >= store.planItemsMeta.last_page || store.planItemsLoading"
-                    @click="goToPage(store.planItemsMeta.last_page)"
-                  >
-                    <Icon name="lucide:chevrons-right" />
-                  </button>
-                </div>
-              </div>
+
+                <!-- Individual items: null/unique reference rows, paginated. -->
+                <template v-else>
+                  <div class="mt-3 overflow-hidden rounded-xl border border-base-200">
+                    <div
+                      v-if="!store.groupedIndividual.length"
+                      class="p-6 text-center text-sm text-base-content/50"
+                    >
+                      {{ (itemsSearch || activeFilterCount > 0)
+                        ? 'No individual items match the current search / filters.'
+                        : (store.groupedConsolidated.length
+                          ? 'All matching items are consolidated.'
+                          : 'No items yet. Add an item to start building the plan.') }}
+                    </div>
+                    <div v-else class="divide-y divide-base-200">
+                      <AnnualprocurementplansPlanItemRow
+                        v-for="it in store.groupedIndividual"
+                        :key="it.id"
+                        :item="it"
+                        :plan-uuid="planUuid"
+                        :can-edit="canEdit"
+                        :can-delete="canDelete"
+                        :can-edit-plan="canEditPlan"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Pagination (individual list) -->
+                  <div v-if="store.groupedIndividualMeta.last_page > 1" class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div class="text-xs text-base-content/60">
+                      Page {{ store.groupedIndividualMeta.current_page }} of {{ store.groupedIndividualMeta.last_page }}
+                      · {{ store.groupedIndividualMeta.total }} total
+                    </div>
+                    <div class="join">
+                      <button
+                        class="btn btn-sm join-item"
+                        :disabled="store.groupedIndividualMeta.current_page <= 1 || store.groupedItemsLoading"
+                        @click="goToPage(1)"
+                      >
+                        <Icon name="lucide:chevrons-left" />
+                      </button>
+                      <button
+                        class="btn btn-sm join-item"
+                        :disabled="store.groupedIndividualMeta.current_page <= 1 || store.groupedItemsLoading"
+                        @click="goToPage(store.groupedIndividualMeta.current_page - 1)"
+                      >
+                        <Icon name="lucide:chevron-left" />
+                        Prev
+                      </button>
+                      <button class="btn btn-sm join-item btn-disabled">
+                        {{ store.groupedIndividualMeta.current_page }}
+                      </button>
+                      <button
+                        class="btn btn-sm join-item"
+                        :disabled="store.groupedIndividualMeta.current_page >= store.groupedIndividualMeta.last_page || store.groupedItemsLoading"
+                        @click="goToPage(store.groupedIndividualMeta.current_page + 1)"
+                      >
+                        Next
+                        <Icon name="lucide:chevron-right" />
+                      </button>
+                      <button
+                        class="btn btn-sm join-item"
+                        :disabled="store.groupedIndividualMeta.current_page >= store.groupedIndividualMeta.last_page || store.groupedItemsLoading"
+                        @click="goToPage(store.groupedIndividualMeta.last_page)"
+                      >
+                        <Icon name="lucide:chevrons-right" />
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </template>
             </div>
           </div>
         </div>
@@ -537,6 +560,16 @@
           />
         </div>
 
+        <!-- Procurement Management Unit -->
+        <div v-else-if="activeTab === 'pmu'">
+          <Procurementmanagementunits
+            :plan-uuid="planUuid"
+            :can-add="canAdd && canEditPlan"
+            :can-edit="canEdit && canEditPlan"
+            :can-delete="canDelete && canEditPlan"
+          />
+        </div>
+
         <!-- Disposal Committee -->
         <div v-else-if="activeTab === 'disposalcommittee'">
           <Disposalcommittees
@@ -581,10 +614,21 @@
                   <span :class="['badge', actionBadge(t.action)]">{{ actionLabel(t.action) }}</span>
                 </td>
                 <td class="font-mono text-xs">{{ t.from_status }} → {{ t.to_status }}</td>
-                <td class="max-w-xl whitespace-pre-line">{{ t.comment || '—' }}</td>
+                <td class="max-w-xl whitespace-pre-line">
+                  <div>{{ t.comment || '—' }}</div>
+                  <span
+                    v-if="t.ai_overridden"
+                    class="badge badge-warning badge-sm mt-1 gap-1"
+                    :title="`AI recommended ${formatAiDecision(t.ai_decision)} — the user proceeded against it`"
+                  >
+                    <Icon name="lucide:alert-triangle" class="h-3 w-3" />
+                    Overrode AI ({{ formatAiDecision(t.ai_decision) }})
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     </div>
@@ -603,6 +647,16 @@ const store = useAnnualprocurementplanStore();
 const { currentPlan: plan } = storeToRefs(store);
 
 const activeTab = ref('items');
+
+// Sub-view within the Plan Items tab: consolidated groups vs individual rows.
+const itemsView = ref('consolidated');
+// Fall back to the individual list when there are no consolidated groups, so
+// the Consolidated sub-tab is never shown empty.
+const effectiveItemsView = computed(() =>
+  (itemsView.value === 'consolidated' && store.groupedConsolidated.length === 0)
+    ? 'individual'
+    : itemsView.value,
+);
 
 const isDraft = computed(() => store.isDraft(plan.value));
 // Only the creator of a draft can edit; everyone else sees a read-only view.
@@ -625,13 +679,7 @@ const peTransitions = computed(() =>
   (store.transitions ?? []).filter((t) => PE_VISIBLE_ACTIONS.has(t.action)),
 );
 
-const totalItems = computed(() => store.planItemsMeta?.total ?? plan.value?.items_count ?? 0);
-
-const hasUnresolved = (item) =>
-  (item.raw_procurementmethod_code !== null && item.raw_procurementmethod_code !== undefined && !item.procurementmethod_id)
-  || (item.raw_procurementgroup_code !== null && item.raw_procurementgroup_code !== undefined && !item.procurementgroup_id)
-  || (item.raw_sourceoffunds_name !== null && item.raw_sourceoffunds_name !== undefined && !item.sourceoffunds_id)
-  || (item.raw_unitofmeasure_name !== null && item.raw_unitofmeasure_name !== undefined && !item.unitofmeasure_id);
+const totalItems = computed(() => plan.value?.items_count ?? store.groupedIndividualMeta?.total ?? 0);
 
 // Issues badge — sum of all unresolved (field, raw_value) groups across the
 // whole plan, not just the visible page.
@@ -673,12 +721,20 @@ const itemsFilters = reactive({
   procurement_exemption: false,
   consumption_mode: '',
 });
-const activeFilterCount = computed(() => {
+const activeFlagCount = computed(() => {
   let n = 0;
   for (const f of FILTER_FLAGS) if (itemsFilters[f.key]) n++;
-  if (itemsFilters.consumption_mode) n++;
   return n;
 });
+
+// Filters dialog open/close.
+const filtersDialog = ref(null);
+const openFilters = () => filtersDialog.value?.showModal?.();
+const closeFilters = () => filtersDialog.value?.close?.();
+
+const activeFilterCount = computed(() =>
+  activeFlagCount.value + (itemsFilters.consumption_mode ? 1 : 0),
+);
 
 const buildItemsOpts = (extra = {}) => ({
   per_page: itemsPerPage.value,
@@ -696,24 +752,22 @@ const refreshFilteredTotals = (opts) => Promise.all([
   store.fetchItemTotalsByFlag(props.planUuid, opts),
 ]);
 
-const rowNumber = (i) => ((store.planItemsMeta.current_page - 1) * store.planItemsMeta.per_page) + i + 1;
-
 const goToPage = async (page) => {
-  if (page < 1 || page > store.planItemsMeta.last_page) return;
+  if (page < 1 || page > store.groupedIndividualMeta.last_page) return;
   // Pagination doesn't change the filter set, so the totals don't need a
-  // refresh here — just paginate the items list.
-  await store.fetchPlanItems(props.planUuid, buildItemsOpts({ page }));
+  // refresh here — just paginate the individual items list.
+  await store.fetchGroupedItems(props.planUuid, buildItemsOpts({ page }));
 };
 
 const changePerPage = async () => {
-  await store.fetchPlanItems(props.planUuid, buildItemsOpts({ page: 1 }));
+  await store.fetchGroupedItems(props.planUuid, buildItemsOpts({ page: 1 }));
 };
 
 const onSearchInput = () => {
   if (searchTimer) clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     const opts = buildItemsOpts({ page: 1 });
-    store.fetchPlanItems(props.planUuid, opts);
+    store.fetchGroupedItems(props.planUuid, opts);
     refreshFilteredTotals(opts);
   }, 250);
 };
@@ -721,13 +775,13 @@ const onSearchInput = () => {
 const toggleFlagFilter = (key) => {
   itemsFilters[key] = !itemsFilters[key];
   const opts = buildItemsOpts({ page: 1 });
-  store.fetchPlanItems(props.planUuid, opts);
+  store.fetchGroupedItems(props.planUuid, opts);
   refreshFilteredTotals(opts);
 };
 
 const onConsumptionModeChange = () => {
   const opts = buildItemsOpts({ page: 1 });
-  store.fetchPlanItems(props.planUuid, opts);
+  store.fetchGroupedItems(props.planUuid, opts);
   refreshFilteredTotals(opts);
 };
 
@@ -735,13 +789,13 @@ const clearItemsFilters = () => {
   for (const f of FILTER_FLAGS) itemsFilters[f.key] = false;
   itemsFilters.consumption_mode = '';
   const opts = buildItemsOpts({ page: 1 });
-  store.fetchPlanItems(props.planUuid, opts);
+  store.fetchGroupedItems(props.planUuid, opts);
   refreshFilteredTotals(opts);
 };
 
 const onResolved = async () => {
   await Promise.all([
-    store.fetchPlanItems(props.planUuid, buildItemsOpts({ page: store.planItemsMeta.current_page })),
+    store.fetchGroupedItems(props.planUuid, buildItemsOpts({ page: store.groupedIndividualMeta.current_page })),
     store.fetchItemTotals(props.planUuid),
     store.fetchItemTotalsByGroup(props.planUuid),
     store.fetchItemTotalsByFlag(props.planUuid),
@@ -837,9 +891,22 @@ const paymentStatusBadge = (status) => {
 
 const formatPaymentStatus = (status) => (status ?? '').replace('_', ' ');
 
+const formatAiDecision = (d) => ({
+  SEND_BACK_TO_PE: 'send back',
+  NEEDS_CORRECTIONS: 'needs corrections',
+  APPROVE: 'approve',
+  READY: 'ready',
+})[d] ?? (d || 'n/a');
+
 const formatAmount = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return '—';
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const currencySymbol = computed(() => {
+  const c = plan.value?.currency;
+  if (!c) return '';
+  return c.symbol ? `${c.symbol} ` : `${c.code} `;
+});
 </script>

@@ -1,3 +1,5 @@
+import { usePeClient } from './usePeClient';
+
 /**
  * Peclient self-service for the PE's own encryption keypair.
  * Backend: Modules/Admin/Http/Controllers/MyEncryptionKeyController.

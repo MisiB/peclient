@@ -237,6 +237,8 @@
 </template>
 
 <script setup>
+import { usePeClient } from '~/composables/usePeClient';
+
 const props = defineProps({
   planUuid: { type: String, required: true },
   item: { type: Object, required: true },
