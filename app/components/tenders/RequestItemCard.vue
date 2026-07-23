@@ -103,6 +103,8 @@
       :title="productModalTitle"
       :submit-label="productModalSubmitLabel"
       :remaining-quantity="productRemainingQty"
+      :tender-uuid="tenderUuid"
+      :item-id="item?.id"
       :initial="productInitial"
       @submit="onProductSubmit"
     />

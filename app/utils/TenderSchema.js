@@ -35,6 +35,7 @@ export const TenderStep1Schema = yup.object({
   required_bid_bond: yup.string().nullable().oneOf(['Y', 'N'], 'Select whether you require a bid bond'),
   bid_validity_period: yup.number().nullable().oneOf([30, 60, 90, 120], 'Select a valid bid validity period'),
   evaluationcriterion_id: yup.number().nullable(),
+  supplier_category_ids: yup.array().of(yup.number()).default([]),
 }).test('bid-security', function (value) {
   const { methodAllowsBidBond } = this.options.context ?? {}
   if (!methodAllowsBidBond) {

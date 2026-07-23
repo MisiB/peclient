@@ -300,6 +300,51 @@
                 <span class="label-text-alt text-error">{{ errors.allowed_participants }}</span>
               </label>
             </label>
+
+            <div class="fieldset sm:col-span-2">
+              <div class="mb-1 flex items-center justify-between">
+                <span class="text-sm font-medium text-base-content">Required supplier categories</span>
+                <span class="badge badge-ghost badge-sm">{{ form.supplier_category_ids.length }} selected</span>
+              </div>
+              <p class="mb-2 text-xs leading-relaxed text-base-content/60">
+                Restrict eligibility to suppliers registered in specific categories. Leave empty to allow any registered supplier.
+              </p>
+              <div class="rounded-box border border-base-200 bg-base-100">
+                <div class="border-b border-base-200 p-2">
+                  <label class="input input-sm input-bordered flex items-center gap-2">
+                    <Icon name="lucide:search" class="h-4 w-4 text-base-content/40" />
+                    <input
+                      v-model="supplierCategorySearch"
+                      type="text"
+                      class="grow"
+                      placeholder="Search categories…"
+                    >
+                  </label>
+                </div>
+                <div class="max-h-56 space-y-1 overflow-y-auto p-2">
+                  <p v-if="filteredSupplierCategories.length === 0" class="px-1 py-3 text-center text-sm text-base-content/50">
+                    No supplier categories match your search.
+                  </p>
+                  <label
+                    v-for="c in filteredSupplierCategories"
+                    :key="c.id"
+                    class="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-base-200/50"
+                  >
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-sm mt-0.5"
+                      :checked="form.supplier_category_ids.includes(c.id)"
+                      @change="toggleSupplierCategory(c.id)"
+                    >
+                    <span class="min-w-0">
+                      <span class="block text-sm font-medium leading-snug">{{ c.name }}</span>
+                      <span class="block font-mono text-xs text-base-content/50">{{ c.code }}</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <label class="fieldset">
               <TendersFieldLegend help-key="lotType" label="LOT type" />
               <select
@@ -426,7 +471,7 @@ const emit = defineEmits(['saved'])
 
 const { getCompanyPlan } = useDashboardHelper()
 const { getProcurementGroups, getProcurementMethods } = useAnnualprocurementplanHelper()
-const { getBidOpeningTypes, getBidValidityPeriodFees, getEvaluationCriteriaForProcurementGroup, createTender, updateTender, getTender } = useTenderHelper()
+const { getBidOpeningTypes, getBidValidityPeriodFees, getSupplierCategories, getEvaluationCriteriaForProcurementGroup, createTender, updateTender, getTender } = useTenderHelper()
 
 const procurementGroups = ref([])
 const procurementMethods = ref([])
@@ -434,6 +479,8 @@ const bidOpeningTypes = ref([])
 const bidValidityFees = ref([])
 const evaluationCriteria = ref([])
 const loadingEvaluationCriteria = ref(false)
+const supplierCategories = ref([])
+const supplierCategorySearch = ref('')
 
 const DEFAULT_VALIDITY_PERIODS = [30, 60, 90, 120]
 
@@ -494,7 +541,23 @@ const form = ref({
   required_bid_bond: null,
   bid_validity_period: null,
   evaluationcriterion_id: null,
+  supplier_category_ids: [],
 })
+
+const filteredSupplierCategories = computed(() => {
+  const term = supplierCategorySearch.value.trim().toLowerCase()
+  if (!term) return supplierCategories.value
+  return supplierCategories.value.filter(
+    (c) => `${c.code} ${c.name}`.toLowerCase().includes(term),
+  )
+})
+
+function toggleSupplierCategory(id) {
+  const set = new Set(form.value.supplier_category_ids)
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
+  form.value.supplier_category_ids = [...set]
+}
 
 const errors = reactive({ form: '' })
 
@@ -558,17 +621,19 @@ watch(
 )
 
 async function loadLookups() {
-  const [groupsRes, methodsRes, openingRes, validityRes] = await Promise.all([
+  const [groupsRes, methodsRes, openingRes, validityRes, categoriesRes] = await Promise.all([
     getProcurementGroups(),
     getProcurementMethods(),
     getBidOpeningTypes(),
     getBidValidityPeriodFees(),
+    getSupplierCategories(),
   ])
 
   procurementGroups.value = groupsRes.data.value?.data ?? []
   procurementMethods.value = methodsRes.data.value?.data ?? []
   bidOpeningTypes.value = openingRes.data.value?.data ?? []
   bidValidityFees.value = validityRes.data.value?.data ?? []
+  supplierCategories.value = categoriesRes.data.value?.data ?? []
 }
 
 async function reloadEvaluationCriteria() {
@@ -638,6 +703,7 @@ async function loadExisting() {
     required_bid_bond: t.required_bid_bond === 'Y' || t.required_bid_bond === 'N' ? t.required_bid_bond : null,
     bid_validity_period: t.bid_validity_period ?? null,
     evaluationcriterion_id: t.evaluationcriterion_id ?? null,
+    supplier_category_ids: (t.supplier_categories ?? []).map((c) => c.id),
   }
 }
 

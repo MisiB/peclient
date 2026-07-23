@@ -184,6 +184,29 @@
             </div>
           </div>
 
+          <!-- Eligible supplier categories -->
+          <div class="collapse collapse-arrow border border-base-200 bg-base-100">
+            <input type="checkbox" />
+            <div class="collapse-title text-sm font-medium">
+              Eligible supplier categories ({{ supplierCategories.length }})
+            </div>
+            <div class="collapse-content">
+              <p v-if="supplierCategories.length === 0" class="py-2 text-sm text-base-content/50">
+                No supplier categories set — any registered supplier may bid.
+              </p>
+              <div v-else class="flex flex-wrap gap-2">
+                <span
+                  v-for="c in supplierCategories"
+                  :key="c.id"
+                  class="badge badge-outline gap-1"
+                >
+                  <span class="font-mono text-xs opacity-60">{{ c.code }}</span>
+                  {{ c.name }}
+                </span>
+              </div>
+            </div>
+          </div>
+
           <!-- Document requirements -->
           <div class="collapse collapse-arrow border border-base-200 bg-base-100">
             <input type="checkbox" />
@@ -264,6 +287,9 @@
           </div>
         </div>
       </div>
+
+      <!-- Addenda (only once the tender is live) -->
+      <TendersAddendaPanel v-if="tender.status === 'PUBLISHED'" :tender-uuid="uuid" />
 
       <!-- History timeline -->
       <div class="card border border-base-200 bg-base-100 shadow-sm">
@@ -473,6 +499,8 @@ const overviewFields = computed(() => {
 const itemsTotal = computed(() =>
   items.value.reduce((sum, it) => sum + Number(it.total ?? 0), 0),
 )
+
+const supplierCategories = computed(() => tender.value?.supplier_categories ?? [])
 
 function prettyStatus(status) {
   return String(status ?? '').replaceAll('_', ' ')

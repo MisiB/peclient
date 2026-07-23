@@ -100,6 +100,102 @@ export const useTenderHelper = () => {
     }
   }
 
+  const getSupplierCategories = async () => {
+    try {
+      const data = await client('/api/v1/supplier-categories/list', { method: 'GET' })
+      return { data: ref(data), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), error: ref(err) }
+    }
+  }
+
+  const getTenderAddenda = async (uuid) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda`, { method: 'GET' })
+      return { data: ref(data), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), error: ref(err) }
+    }
+  }
+
+  const getTenderAddendum = async (uuid, addendumUuid) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda/${addendumUuid}`, { method: 'GET' })
+      return { data: ref(data), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), error: ref(err) }
+    }
+  }
+
+  const createTenderAddendum = async (uuid, payload) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda`, { method: 'POST', body: payload })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
+  const updateTenderAddendum = async (uuid, addendumUuid, payload) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda/${addendumUuid}`, { method: 'PUT', body: payload })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
+  const deleteTenderAddendum = async (uuid, addendumUuid) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda/${addendumUuid}`, { method: 'DELETE' })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
+  const getAddendumWorkflowActions = async (uuid, addendumUuid) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda/${addendumUuid}/workflow-actions`, { method: 'GET' })
+      return { data: ref(data), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), error: ref(err) }
+    }
+  }
+
+  const transitionAddendum = async (uuid, addendumUuid, action, comment = null) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda/${addendumUuid}/transition`, {
+        method: 'POST',
+        body: { action, comment },
+      })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
+  const downloadAddendumAttachment = async (uuid, addendumUuid) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/addenda/${addendumUuid}/attachment`, { method: 'GET' })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
+  const suggestProductSpecifications = async (uuid, itemId, payload) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/items/${itemId}/products/suggest-specifications`, {
+        method: 'POST',
+        body: payload,
+      })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
   /** Evaluation criteria linked to the procurement group (pivot `procurementgroup_evaluationcriteria`). */
   const getEvaluationCriteriaForProcurementGroup = async (groupId) => {
     if (!groupId) {
@@ -502,6 +598,16 @@ export const useTenderHelper = () => {
     deleteTender,
     getBidOpeningTypes,
     getBidValidityPeriodFees,
+    getSupplierCategories,
+    suggestProductSpecifications,
+    getTenderAddenda,
+    getTenderAddendum,
+    createTenderAddendum,
+    updateTenderAddendum,
+    deleteTenderAddendum,
+    getAddendumWorkflowActions,
+    transitionAddendum,
+    downloadAddendumAttachment,
     getEvaluationCriteriaForProcurementGroup,
     getTenderItems,
     getEligibleAppItems,
