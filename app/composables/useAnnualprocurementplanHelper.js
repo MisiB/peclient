@@ -101,6 +101,36 @@ export const useAnnualprocurementplanHelper = () => {
     }
   };
 
+  const getClassificationMatches = async (planUuid) => {
+    try {
+      const data = await client(`${base}/${planUuid}/classification-matches`, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const startClassificationMatch = async (planUuid) => {
+    try {
+      const data = await client(`${base}/${planUuid}/classification-matches/run`, { method: 'POST' });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const decideClassificationMatch = async (planUuid, matchId, decision) => {
+    try {
+      const data = await client(`${base}/${planUuid}/classification-matches/${matchId}`, {
+        method: 'PATCH',
+        body: { decision },
+      });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
   const getComplianceChat = async (planUuid) => {
     try {
       const data = await client(`${base}/${planUuid}/compliance-chat`, { method: 'GET' });
@@ -1004,6 +1034,9 @@ export const useAnnualprocurementplanHelper = () => {
     setConsolidationName,
     getComplianceAnalysis,
     startComplianceAnalysis,
+    getClassificationMatches,
+    startClassificationMatch,
+    decideClassificationMatch,
     getComplianceChat,
     sendComplianceChat,
     getItemTotals,

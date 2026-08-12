@@ -17,6 +17,16 @@
           Back
         </button>
         <button
+          class="btn btn-outline btn-primary btn-sm"
+          type="button"
+          :disabled="saving || loading || autofilling"
+          @click="autofillPolicyFields"
+        >
+          <span v-if="autofilling" class="loading loading-spinner loading-xs" />
+          <Icon v-else name="lucide:sparkles" class="h-4 w-4" />
+          {{ autofilling ? 'Generating...' : 'Complete policy fields with AI' }}
+        </button>
+        <button
           class="btn btn-outline btn-sm"
           type="button"
           :disabled="saving || loading"
@@ -51,6 +61,71 @@
     </div>
 
     <template v-else>
+      <div class="card border border-base-200 bg-base-100 shadow-sm">
+        <div class="card-body gap-4 p-4 sm:p-6">
+          <div>
+            <h3 class="text-base font-semibold">Information from steps 1-7</h3>
+            <p class="text-xs text-base-content/60">
+              These details are inserted automatically into the Government of Zimbabwe goods SBD.
+            </p>
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div
+              v-for="item in autoBound"
+              :key="item.label"
+              class="rounded-lg border border-base-200 bg-base-200/20 px-3 py-2"
+            >
+              <p class="text-xs text-base-content/50">{{ item.label }}</p>
+              <p class="mt-0.5 whitespace-pre-line text-sm font-medium">{{ item.value || 'Not captured' }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card border border-base-200 bg-base-100 shadow-sm">
+        <div class="card-body gap-5 p-4 sm:p-6">
+          <div>
+            <h3 class="text-base font-semibold">SBD policy and contract details</h3>
+            <p class="text-xs text-base-content/60">
+              Review the bidding-procedure and Special Conditions fields that are not captured in earlier steps.
+            </p>
+          </div>
+
+          <section v-for="group in fieldGroups" :key="group.name" class="space-y-3">
+            <h4 class="border-b border-base-200 pb-2 text-sm font-semibold">{{ group.name }}</h4>
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <label
+                v-for="field in group.fields"
+                :key="field.key"
+                :class="['fieldset', field.type === 'textarea' ? 'lg:col-span-2' : '']"
+              >
+                <span class="fieldset-legend">{{ field.label }}</span>
+                <input
+                  v-if="field.type === 'boolean'"
+                  v-model="values[field.key]"
+                  type="checkbox"
+                  class="toggle toggle-primary"
+                />
+                <textarea
+                  v-else-if="field.type === 'textarea'"
+                  v-model="values[field.key]"
+                  class="textarea textarea-bordered min-h-24 w-full"
+                />
+                <input
+                  v-else
+                  v-model="values[field.key]"
+                  :type="field.type === 'number' ? 'number' : 'text'"
+                  :min="field.type === 'number' ? 0 : undefined"
+                  :step="field.type === 'number' ? 'any' : undefined"
+                  class="input input-bordered w-full"
+                />
+                <span v-if="field.help" class="label-text-alt mt-1 text-base-content/50">{{ field.help }}</span>
+              </label>
+            </div>
+          </section>
+        </div>
+      </div>
+
       <!-- Custom sections (procuring-entity flexibility) -->
       <div class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-4 p-4 sm:p-6">
@@ -298,14 +373,17 @@ const {
   getSbdSectionLibrary,
   saveSbdSection,
   deleteSbdSection,
+  autofillTenderSbd,
 } = useTenderHelper();
 
 const loading = ref(true);
 const saving = ref(false);
 const continuing = ref(false);
+const autofilling = ref(false);
 const errorMessage = ref('');
 
 const fieldSchema = ref([]);
+const autoBound = ref([]);
 const values = reactive({});
 const customSections = ref([]);
 
@@ -320,6 +398,19 @@ const libraryPersonal = ref([]);
 const loadingLibrary = ref(false);
 const libraryLoaded = ref(false);
 const savingSection = ref(null);
+
+const fieldGroups = computed(() => {
+  const groups = [];
+  for (const field of fieldSchema.value) {
+    let group = groups.find((entry) => entry.name === field.group);
+    if (!group) {
+      group = { name: field.group || 'Other details', fields: [] };
+      groups.push(group);
+    }
+    group.fields.push(field);
+  }
+  return groups;
+});
 
 function plainSections() {
   return customSections.value.map((s) => {
@@ -440,6 +531,7 @@ function removeItem(section, ii) {
 
 function applyPayload(payload) {
   fieldSchema.value = payload?.field_schema ?? [];
+  autoBound.value = payload?.auto_bound ?? [];
 
   const current = payload?.field_values ?? {};
   for (const field of fieldSchema.value) {
@@ -452,6 +544,35 @@ function applyPayload(payload) {
   }
 
   customSections.value = (payload?.custom_sections ?? []).map(normalizeSection);
+}
+
+async function autofillPolicyFields() {
+  autofilling.value = true;
+  const { status, data, error } = await autofillTenderSbd(props.tenderUuid);
+  autofilling.value = false;
+
+  if (!status?.value) {
+    toast.error({
+      title: 'AI generation failed',
+      message: error?.value?.data?.message || 'Could not generate the SBD policy fields.',
+      position: 'topRight',
+      layout: 2,
+    });
+    return;
+  }
+
+  const suggestions = data.value?.data?.field_values ?? {};
+  for (const field of fieldSchema.value) {
+    if (Object.prototype.hasOwnProperty.call(suggestions, field.key)) {
+      values[field.key] = suggestions[field.key];
+    }
+  }
+  toast.success({
+    title: 'Draft completed',
+    message: 'Review the AI-generated policy and contract details before saving.',
+    position: 'topRight',
+    layout: 2,
+  });
 }
 
 // One-line preview of a library entry's body for the picker list.

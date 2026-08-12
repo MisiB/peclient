@@ -7,8 +7,8 @@
           <span class="badge badge-warning badge-sm">Required</span>
         </div>
         <p class="text-sm text-base-content/60">
-          Review statutory checks across all wizard steps. When the law library is indexed, AI analysis cites
-          the Act and Regulations.
+          The EGP AI application reviews the information captured in steps 1–8 and combines it with statutory
+          and structural safeguards before publication.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -16,14 +16,10 @@
           <Icon name="lucide:arrow-left" class="h-4 w-4" />
           Back
         </button>
-        <button class="btn btn-outline btn-sm" type="button" :disabled="running" @click="runAnalysis(false)">
-          <span v-if="running && !includeRag" class="loading loading-spinner loading-xs" />
-          Rules only
-        </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="running" @click="runAnalysis(true)">
-          <span v-if="running && includeRag" class="loading loading-spinner loading-xs" />
+        <button class="btn btn-primary btn-sm" type="button" :disabled="running" @click="runAnalysis">
+          <span v-if="running" class="loading loading-spinner loading-xs" />
           <Icon v-else name="lucide:scan-search" class="h-4 w-4" />
-          Full analysis
+          Run AI preview &amp; analysis
         </button>
       </div>
     </div>
@@ -31,8 +27,8 @@
     <div v-if="!lawKbReady" class="alert alert-warning border border-warning/30 bg-warning/10">
       <Icon name="lucide:book-open" class="h-5 w-5 shrink-0" />
       <span class="text-sm">
-        Legal knowledge base is not indexed yet — only rule-based checks will run. Ask your administrator to seed
-        and index procurement law excerpts.
+        The AI application will still review the tender, but legal citations cannot be verified until the
+        procurement-law knowledge base is indexed.
       </span>
     </div>
 
@@ -43,7 +39,7 @@
 
     <div v-if="running && analysisStatus === 'PENDING'" class="alert alert-info border border-info/30 bg-info/10">
       <span class="loading loading-spinner loading-sm" />
-      <span class="text-sm">Legal compliance analysis is running in the background…</span>
+      <span class="text-sm text-black">The EGP AI application is reviewing the tender in the background…</span>
     </div>
 
     <div v-if="loading" class="card border border-base-200 bg-base-100 shadow-sm">
@@ -96,7 +92,21 @@
 
       <section v-if="report.tier2" class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-3 p-4 sm:p-6">
-          <h3 class="text-base font-semibold">Tier 2 — Legal analysis (RAG)</h3>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-base font-semibold">Tier 2 — AI preview &amp; legal analysis</h3>
+            <div v-if="report.ai_application?.used" class="flex flex-wrap gap-2">
+              <span class="badge badge-primary badge-sm">EGP AI application</span>
+              <span v-if="report.ai_application.model" class="badge badge-outline badge-sm">
+                {{ report.ai_application.provider }} · {{ report.ai_application.model }}
+              </span>
+              <span class="badge badge-outline badge-sm">
+                {{ report.ai_application.knowledge_base_used ? 'Law RAG used' : 'No law RAG' }}
+              </span>
+            </div>
+          </div>
+          <p v-if="report.tier2.message && report.tier2.status !== 'skipped'" class="text-sm text-base-content/60">
+            {{ report.tier2.message }}
+          </p>
           <p v-if="report.tier2.status === 'skipped'" class="text-sm text-base-content/60">
             {{ report.tier2.message }}
           </p>
@@ -137,9 +147,9 @@
 
     <div v-else class="card border border-base-200 bg-base-100 shadow-sm">
       <div class="card-body p-6 text-center text-base-content/60">
-        <p>Run compliance analysis to review all wizard steps before publication.</p>
-        <button class="btn btn-primary btn-sm mt-4" type="button" :disabled="running" @click="runAnalysis(true)">
-          Run analysis
+        <p>Run the EGP AI application to preview and analyse all wizard steps before publication.</p>
+        <button class="btn btn-primary btn-sm mt-4" type="button" :disabled="running" @click="runAnalysis">
+          Run AI preview &amp; analysis
         </button>
       </div>
     </div>
@@ -160,7 +170,6 @@ const { getTenderComplianceAnalysis, runTenderComplianceAnalysis } = useTenderHe
 
 const loading = ref(true);
 const running = ref(false);
-const includeRag = ref(true);
 const errorMessage = ref('');
 const report = ref(null);
 const lawKbReady = ref(false);
@@ -212,9 +221,10 @@ async function load(showSpinner = true) {
   report.value = payload.report ?? null;
   if (!report.value && payload.tier1_preview) {
     report.value = {
-      can_publish: payload.can_publish_preview,
+      can_publish: false,
+      preview_only: true,
       tier1: payload.tier1_preview,
-      tier2: { status: 'skipped', findings: [], message: 'Run full analysis for legal review.' },
+      tier2: { status: 'skipped', findings: [], message: 'Run AI preview and analysis for the legal review.' },
     };
   }
 
@@ -229,11 +239,10 @@ async function load(showSpinner = true) {
   loading.value = false;
 }
 
-async function runAnalysis(withRag) {
-  includeRag.value = withRag;
+async function runAnalysis() {
   running.value = true;
   errorMessage.value = '';
-  const { status, data, error } = await runTenderComplianceAnalysis(props.tenderUuid, withRag);
+  const { status, data, error } = await runTenderComplianceAnalysis(props.tenderUuid);
 
   if (!status?.value) {
     running.value = false;
@@ -242,7 +251,7 @@ async function runAnalysis(withRag) {
   }
 
   const body = data.value?.data ?? {};
-  if (body.analysis_status === 'PENDING' || (withRag && !body.report)) {
+  if (body.analysis_status === 'PENDING' || !body.report) {
     analysisStatus.value = 'PENDING';
     startPoll();
     return;
@@ -260,10 +269,10 @@ async function runAnalysis(withRag) {
 }
 
 function finish() {
-  if (report.value && !report.value.can_publish) {
+  if (report.value && (!report.value.can_publish || !report.value.ai_application?.used)) {
     toast.error({
       title: 'Cannot finish review',
-      message: 'Resolve compliance issues or run rules-only analysis if the law library is not ready.',
+      message: 'Resolve the compliance issues and run the AI preview and analysis again.',
       position: 'topRight',
       layout: 2,
     });

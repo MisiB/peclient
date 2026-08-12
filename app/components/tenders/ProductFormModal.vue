@@ -46,7 +46,7 @@
               >
                 <span v-if="suggesting" class="loading loading-spinner loading-xs" />
                 <Icon v-else name="lucide:sparkles" class="h-3.5 w-3.5" />
-                {{ suggesting ? 'Generating…' : 'Generate with AI' }}
+                {{ suggesting ? 'Generating…' : 'Generate specifications with AI' }}
               </button>
               <button type="button" class="btn btn-ghost btn-xs" :disabled="submitting" @click="addSpecRow">
                 <Icon name="lucide:plus" class="h-3.5 w-3.5" />

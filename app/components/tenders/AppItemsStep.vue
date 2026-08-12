@@ -21,9 +21,6 @@
           <Icon name="lucide:plus" class="h-4 w-4" />
           Add line item
         </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="loading" @click="emit('saved')">
-          Save & continue
-        </button>
       </div>
     </div>
 
@@ -63,6 +60,18 @@
     </div>
 
     <TendersFeesPanel v-if="tenderUuid && requestItems.length" ref="feesPanel" :tender-uuid="tenderUuid" />
+
+    <div class="flex justify-end border-t border-base-200 pt-4">
+      <button
+        class="btn btn-primary w-full sm:w-auto"
+        type="button"
+        :disabled="loading"
+        @click="emit('saved')"
+      >
+        Save & continue
+        <Icon name="lucide:arrow-right" class="h-4 w-4" />
+      </button>
+    </div>
 
     <TendersItemAddDialog
       ref="addDialog"

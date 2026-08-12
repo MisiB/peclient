@@ -40,6 +40,17 @@
           </NuxtLink>
         </li>
 
+        <li>
+          <NuxtLink
+            to="/legacy-archive"
+            :class="['gap-2 rounded-lg', route.path.startsWith('/legacy-archive') ? 'bg-success text-white' : '']"
+            @click="$emit('close')"
+          >
+            <Icon name="lucide:archive" class="h-4 w-4 shrink-0" />
+            <span>Legacy archive</span>
+          </NuxtLink>
+        </li>
+
         <li v-for="module in modules" :key="module.id" class="mt-1">
           <details open>
             <summary class="gap-2 rounded-lg font-medium">

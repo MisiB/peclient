@@ -25,10 +25,6 @@
         >
           Skip step
         </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="saving || loading" @click="saveAndContinue">
-          <span v-if="saving" class="loading loading-spinner loading-xs" />
-          <span v-else>Save &amp; continue</span>
-        </button>
       </div>
     </div>
 
@@ -50,11 +46,32 @@
           <p class="text-sm text-base-content/60">
             {{ questions.length }} question{{ questions.length === 1 ? '' : 's' }}
           </p>
-          <button class="btn btn-success btn-sm" type="button" @click="addQuestion">
-            <Icon name="lucide:plus" class="h-4 w-4" />
-            Add question
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              class="btn btn-outline btn-primary btn-sm"
+              type="button"
+              :disabled="generating || saving || loading"
+              @click="generateQuestions"
+            >
+              <span v-if="generating" class="loading loading-spinner loading-xs" />
+              <Icon v-else name="lucide:sparkles" class="h-4 w-4" />
+              {{ generating ? 'Generating…' : 'Generate questions with AI' }}
+            </button>
+            <button class="btn btn-success btn-sm" type="button" :disabled="generating" @click="addQuestion">
+              <Icon name="lucide:plus" class="h-4 w-4" />
+              Add question
+            </button>
+          </div>
         </div>
+
+        <div v-if="suggestError" class="alert alert-warning py-2 text-sm">
+          <Icon name="lucide:triangle-alert" class="h-4 w-4 shrink-0" />
+          <span>{{ suggestError }}</span>
+        </div>
+
+        <p class="text-xs text-base-content/50">
+          AI suggestions are drafts only. Review and edit every question before saving.
+        </p>
 
         <div
           v-if="questions.length === 0"
@@ -107,6 +124,21 @@
         </div>
       </div>
     </div>
+
+    <div class="flex justify-end border-t border-base-200 pt-4">
+      <button
+        class="btn btn-primary w-full sm:w-auto"
+        type="button"
+        :disabled="saving || loading"
+        @click="saveAndContinue"
+      >
+        <span v-if="saving" class="loading loading-spinner loading-sm" />
+        <template v-else>
+          Save &amp; continue
+          <Icon name="lucide:arrow-right" class="h-4 w-4" />
+        </template>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -120,11 +152,17 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'back']);
 
 const toast = useToast();
-const { getTenderEligibilityQuestions, syncTenderEligibilityQuestions } = useTenderHelper();
+const {
+  getTenderEligibilityQuestions,
+  syncTenderEligibilityQuestions,
+  suggestTenderEligibilityQuestions,
+} = useTenderHelper();
 
 const loading = ref(true);
 const saving = ref(false);
+const generating = ref(false);
 const errorMessage = ref('');
+const suggestError = ref('');
 /** @type {import('vue').Ref<Array<{ _key: string, question: string, response_type: string }>>} */
 const questions = ref([]);
 const rowErrors = reactive({});
@@ -147,6 +185,63 @@ function removeQuestion(index) {
   const row = questions.value[index];
   if (row?._key) delete rowErrors[row._key];
   questions.value.splice(index, 1);
+}
+
+function normalizeQuestion(value) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[?]+$/, '');
+}
+
+async function generateQuestions() {
+  if (generating.value) return;
+
+  generating.value = true;
+  suggestError.value = '';
+
+  const existingQuestions = questions.value
+    .filter((row) => row.question?.trim())
+    .map((row) => ({
+      question: row.question.trim(),
+      response_type: row.response_type || 'YES_NO',
+    }));
+
+  const { data, status, error } = await suggestTenderEligibilityQuestions(props.tenderUuid, {
+    existing_questions: existingQuestions,
+  });
+  generating.value = false;
+
+  if (!status?.value) {
+    suggestError.value =
+      error?.value?.data?.message
+      || data?.value?.message
+      || 'Could not generate eligibility questions. Please try again.';
+    return;
+  }
+
+  const suggestions = data.value?.data?.questions ?? [];
+  const populatedRows = questions.value.filter((row) => row.question?.trim());
+  const seen = new Set(populatedRows.map((row) => normalizeQuestion(row.question)));
+  const newRows = [];
+
+  for (const suggestion of suggestions) {
+    const normalized = normalizeQuestion(suggestion.question);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    newRows.push(newRow(suggestion.question, suggestion.response_type ?? 'YES_NO'));
+  }
+
+  questions.value = [...populatedRows, ...newRows];
+
+  if (newRows.length === 0) {
+    suggestError.value = 'The AI did not return any new questions that were not already listed.';
+    return;
+  }
+
+  toast.success({
+    title: 'Questions drafted',
+    message: `${newRows.length} editable eligibility question${newRows.length === 1 ? '' : 's'} added.`,
+    position: 'topRight',
+    layout: 2,
+  });
 }
 
 function clearRowErrors() {

@@ -12,10 +12,6 @@
           <Icon name="lucide:arrow-left" class="h-4 w-4" />
           Back
         </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="saving || loading" @click="saveAndContinue">
-          <span v-if="saving" class="loading loading-spinner loading-xs" />
-          <span v-else>Save &amp; continue</span>
-        </button>
       </div>
     </div>
 
@@ -106,6 +102,21 @@
           No documents match your search.
         </p>
       </div>
+    </div>
+
+    <div class="flex justify-end border-t border-base-200 pt-4">
+      <button
+        class="btn btn-primary w-full sm:w-auto"
+        type="button"
+        :disabled="saving || loading"
+        @click="saveAndContinue"
+      >
+        <span v-if="saving" class="loading loading-spinner loading-sm" />
+        <template v-else>
+          Save &amp; continue
+          <Icon name="lucide:arrow-right" class="h-4 w-4" />
+        </template>
+      </button>
     </div>
   </div>
 </template>

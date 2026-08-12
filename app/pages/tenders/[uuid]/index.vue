@@ -278,10 +278,15 @@
 
           <!-- Bidding document -->
           <div class="flex flex-wrap items-center gap-3 pt-1">
-            <button type="button" class="btn btn-outline btn-sm" :disabled="sbdDownloading" @click="downloadSbd">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              :disabled="sbdDownloading || (!sbdHasPdf && !canGenerateSbd)"
+              @click="downloadSbd"
+            >
               <span v-if="sbdDownloading" class="loading loading-spinner loading-xs" />
-              <Icon v-else name="lucide:download" class="h-4 w-4" />
-              Download bidding document (SBD)
+              <Icon v-else :name="sbdHasPdf ? 'lucide:download' : 'lucide:file-plus-2'" class="h-4 w-4" />
+              {{ sbdHasPdf ? 'Download bidding document (SBD)' : canGenerateSbd ? 'Generate & download bidding document' : 'Bidding document pending generation' }}
             </button>
             <span v-if="sbdError" class="text-xs text-error">{{ sbdError }}</span>
           </div>
@@ -377,6 +382,8 @@ const {
   getTenderDocumentRequirements,
   getTenderEligibilityQuestions,
   getTenderTechnicalEligibilityQuestions,
+  getTenderSbd,
+  generateTenderSbd,
   downloadTenderSbd,
 } = useTenderHelper()
 
@@ -394,6 +401,7 @@ const items = ref([])
 const documentRequirements = ref([])
 const eligibilityQuestions = ref([])
 const technicalQuestions = ref([])
+const sbdDetails = ref(null)
 const sbdDownloading = ref(false)
 const sbdError = ref('')
 
@@ -501,6 +509,8 @@ const itemsTotal = computed(() =>
 )
 
 const supplierCategories = computed(() => tender.value?.supplier_categories ?? [])
+const sbdHasPdf = computed(() => Boolean(sbdDetails.value?.sbd?.has_pdf))
+const canGenerateSbd = computed(() => tender.value?.status === 'DRAFT' && canEdit.value)
 
 function prettyStatus(status) {
   return String(status ?? '').replaceAll('_', ' ')
@@ -572,16 +582,18 @@ async function loadTransitions() {
 async function loadDetails() {
   detailsLoading.value = true
   try {
-    const [it, docs, elig, tech] = await Promise.all([
+    const [it, docs, elig, tech, sbd] = await Promise.all([
       getTenderItems(uuid),
       getTenderDocumentRequirements(uuid),
       getTenderEligibilityQuestions(uuid),
       getTenderTechnicalEligibilityQuestions(uuid),
+      getTenderSbd(uuid),
     ])
     items.value = it.data.value?.data ?? []
     documentRequirements.value = docs.data.value?.data ?? []
     eligibilityQuestions.value = elig.data.value?.data?.questions ?? []
     technicalQuestions.value = tech.data.value?.data?.questions ?? []
+    sbdDetails.value = sbd.data.value?.data ?? null
   } finally {
     detailsLoading.value = false
   }
@@ -591,9 +603,32 @@ async function downloadSbd() {
   sbdDownloading.value = true
   sbdError.value = ''
   try {
-    const { data, status } = await downloadTenderSbd(uuid)
+    if (!sbdHasPdf.value && canGenerateSbd.value) {
+      const generated = await generateTenderSbd(uuid)
+      if (!generated.status.value) {
+        sbdError.value = generated.error.value?.data?.message || 'The bidding document could not be generated.'
+        return
+      }
+
+      const generatedUrl = generated.data.value?.data?.download_url
+      if (generatedUrl) {
+        sbdDetails.value = {
+          ...(sbdDetails.value ?? {}),
+          sbd: {
+            ...(sbdDetails.value?.sbd ?? {}),
+            has_pdf: true,
+            status: generated.data.value?.data?.status,
+            generated_at: generated.data.value?.data?.generated_at,
+          },
+        }
+        window.open(generatedUrl, '_blank')
+        return
+      }
+    }
+
+    const { data, status, error } = await downloadTenderSbd(uuid)
     if (!status.value) {
-      sbdError.value = 'The bidding document is not available yet.'
+      sbdError.value = error.value?.data?.message || 'The bidding document is not available yet.'
       return
     }
     const url = data.value?.data?.url

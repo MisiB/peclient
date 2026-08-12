@@ -15,17 +15,18 @@
           <Icon name="lucide:arrow-left" class="h-4 w-4" />
           Back
         </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="saving || loading || !template" @click="confirmAndContinue">
-          <span v-if="saving" class="loading loading-spinner loading-xs" />
-          <span v-else>Confirm &amp; continue</span>
-        </button>
       </div>
     </div>
 
-    <div v-if="errorMessage" class="alert alert-error border border-error/30 bg-error/10">
+    <div v-if="errorMessage" class="alert border border-error/40 bg-error/10 text-error">
       <Icon name="lucide:alert-triangle" class="h-5 w-5 shrink-0" />
-      <span>{{ errorMessage }}</span>
-      <NuxtLink v-if="needsLineItems" to="#" class="link link-hover text-sm" @click.prevent="emit('back')">
+      <span class="font-medium">{{ errorMessage }}</span>
+      <NuxtLink
+        v-if="needsLineItems"
+        to="#"
+        class="btn btn-error btn-sm justify-self-end"
+        @click.prevent="emit('back')"
+      >
         Go back to line items
       </NuxtLink>
     </div>
@@ -38,9 +39,9 @@
     </div>
 
     <template v-else-if="template">
-      <div class="alert alert-info border border-info/30 bg-info/10">
-        <Icon name="lucide:info" class="h-5 w-5 shrink-0" />
-        <span class="text-sm">{{ template.rules_summary }}</span>
+      <div class="alert border border-info/40 bg-info/10 text-base-content shadow-sm">
+        <Icon name="lucide:info" class="h-5 w-5 shrink-0 text-info" />
+        <span class="text-sm font-medium">{{ template.rules_summary }}</span>
       </div>
 
       <!-- Step 1 parameters -->
@@ -147,6 +148,21 @@
         </div>
       </section>
     </template>
+
+    <div class="flex justify-end border-t border-base-200 pt-4">
+      <button
+        class="btn btn-primary w-full sm:w-auto"
+        type="button"
+        :disabled="saving || loading || !template"
+        @click="confirmAndContinue"
+      >
+        <span v-if="saving" class="loading loading-spinner loading-sm" />
+        <template v-else>
+          Confirm &amp; continue
+          <Icon name="lucide:arrow-right" class="h-4 w-4" />
+        </template>
+      </button>
+    </div>
   </div>
 </template>
 

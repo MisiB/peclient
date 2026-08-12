@@ -37,6 +37,7 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <AnnualprocurementplansClassificationMatch :plan-uuid="planUuid" :can-edit="canEditPlan" />
             <AnnualprocurementplansAnalyzePlan :plan-uuid="planUuid" :can-edit="canEditPlan" />
             <AnnualprocurementplansWorkflowActions :plan-uuid="planUuid" />
           </div>

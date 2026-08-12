@@ -373,6 +373,18 @@ export const useTenderHelper = () => {
     }
   }
 
+  const suggestTenderEligibilityQuestions = async (uuid, payload = {}) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/eligibility-questions/suggest`, {
+        method: 'POST',
+        body: payload,
+      })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
   const getTenderTechnicalEligibilityQuestions = async (uuid) => {
     try {
       const data = await client(`/api/v1/me/tenders/${uuid}/technical-eligibility-questions`, { method: 'GET' })
@@ -386,6 +398,18 @@ export const useTenderHelper = () => {
     try {
       const data = await client(`/api/v1/me/tenders/${uuid}/technical-eligibility-questions`, {
         method: 'PUT',
+        body: payload,
+      })
+      return { data: ref(data), status: ref(true), error: ref(null) }
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) }
+    }
+  }
+
+  const suggestTenderTechnicalEligibilityQuestions = async (uuid, payload = {}) => {
+    try {
+      const data = await client(`/api/v1/me/tenders/${uuid}/technical-eligibility-questions/suggest`, {
+        method: 'POST',
         body: payload,
       })
       return { data: ref(data), status: ref(true), error: ref(null) }
@@ -525,11 +549,11 @@ export const useTenderHelper = () => {
     }
   }
 
-  const runTenderComplianceAnalysis = async (uuid, includeRag = true) => {
+  const runTenderComplianceAnalysis = async (uuid) => {
     try {
       const data = await client(`/api/v1/me/tenders/${uuid}/compliance-analysis/run`, {
         method: 'POST',
-        body: { include_rag: includeRag, async: includeRag },
+        body: { use_ai: true, include_rag: true, async: true },
       })
       return { data: ref(data), status: ref(true), error: ref(null) }
     } catch (err) {
@@ -623,8 +647,10 @@ export const useTenderHelper = () => {
     syncTenderDocumentRequirements,
     getTenderEligibilityQuestions,
     syncTenderEligibilityQuestions,
+    suggestTenderEligibilityQuestions,
     getTenderTechnicalEligibilityQuestions,
     syncTenderTechnicalEligibilityQuestions,
+    suggestTenderTechnicalEligibilityQuestions,
     getTenderFinancialTemplate,
     acknowledgeTenderFinancialTemplate,
     getTenderDates,

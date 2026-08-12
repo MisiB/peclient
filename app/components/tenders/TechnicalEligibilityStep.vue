@@ -15,10 +15,6 @@
           <Icon name="lucide:arrow-left" class="h-4 w-4" />
           Back
         </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="saving || loading" @click="saveAndContinue">
-          <span v-if="saving" class="loading loading-spinner loading-xs" />
-          <span v-else>Save &amp; continue</span>
-        </button>
       </div>
     </div>
 
@@ -36,15 +32,67 @@
 
     <div v-else class="card w-full border border-base-200 bg-base-100 shadow-sm">
       <div class="card-body gap-4 p-4 sm:p-6">
+        <div v-if="isMultipleLot" class="space-y-2">
+          <div>
+            <h3 class="text-sm font-semibold">Select a lot</h3>
+            <p class="text-xs text-base-content/60">
+              Each lot requires its own technical eligibility questions.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2" role="tablist" aria-label="Tender lots">
+            <button
+              v-for="lot in lots"
+              :key="lot.id"
+              type="button"
+              role="tab"
+              :aria-selected="activeLotId === lot.id"
+              :class="['btn btn-sm', activeLotId === lot.id ? 'btn-primary' : 'btn-outline']"
+              @click="activeLotId = lot.id"
+            >
+              Lot {{ lot.lot_number }}
+              <span class="badge badge-sm">{{ lotQuestionCount(lot.id) }}</span>
+            </button>
+          </div>
+          <div v-if="activeLot" class="rounded-lg bg-base-200/50 p-3">
+            <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+              Lot {{ activeLot.lot_number }}
+            </p>
+            <p class="mt-1 text-sm font-medium">{{ activeLot.description }}</p>
+            <p class="text-xs text-base-content/60">Quantity: {{ activeLot.quantity }}</p>
+          </div>
+        </div>
+
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-sm text-base-content/60">
             {{ questions.length }} question{{ questions.length === 1 ? '' : 's' }}
+            <span v-if="isMultipleLot && activeLot">for Lot {{ activeLot.lot_number }}</span>
           </p>
-          <button class="btn btn-success btn-sm" type="button" @click="addQuestion">
-            <Icon name="lucide:plus" class="h-4 w-4" />
-            Add question
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              class="btn btn-outline btn-primary btn-sm"
+              type="button"
+              :disabled="generating || saving || loading"
+              @click="generateQuestions"
+            >
+              <span v-if="generating" class="loading loading-spinner loading-xs" />
+              <Icon v-else name="lucide:sparkles" class="h-4 w-4" />
+              {{ generating ? 'Generating…' : 'Generate technical questions with AI' }}
+            </button>
+            <button class="btn btn-success btn-sm" type="button" :disabled="generating" @click="addQuestion">
+              <Icon name="lucide:plus" class="h-4 w-4" />
+              Add question
+            </button>
+          </div>
         </div>
+
+        <div v-if="suggestError" class="alert alert-warning py-2 text-sm">
+          <Icon name="lucide:triangle-alert" class="h-4 w-4 shrink-0" />
+          <span>{{ suggestError }}</span>
+        </div>
+
+        <p class="text-xs text-base-content/50">
+          AI suggestions are drafts based on the tender items and specifications. Review each question before saving.
+        </p>
 
         <div
           v-if="questions.length === 0"
@@ -109,6 +157,21 @@
         </div>
       </div>
     </div>
+
+    <div class="flex justify-end border-t border-base-200 pt-4">
+      <button
+        class="btn btn-primary w-full sm:w-auto"
+        type="button"
+        :disabled="saving || loading"
+        @click="saveAndContinue"
+      >
+        <span v-if="saving" class="loading loading-spinner loading-sm" />
+        <template v-else>
+          Save &amp; continue
+          <Icon name="lucide:arrow-right" class="h-4 w-4" />
+        </template>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -122,13 +185,40 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'back']);
 
 const toast = useToast();
-const { getTenderTechnicalEligibilityQuestions, syncTenderTechnicalEligibilityQuestions } = useTenderHelper();
+const {
+  getTenderTechnicalEligibilityQuestions,
+  syncTenderTechnicalEligibilityQuestions,
+  suggestTenderTechnicalEligibilityQuestions,
+} = useTenderHelper();
 
 const loading = ref(true);
 const saving = ref(false);
+const generating = ref(false);
 const errorMessage = ref('');
-const questions = ref([]);
+const suggestError = ref('');
+const isMultipleLot = ref(false);
+const lots = ref([]);
+const activeLotId = ref(null);
+const questionsByLot = ref({ general: [] });
 const rowErrors = reactive({});
+
+const activeLot = computed(() =>
+  lots.value.find((lot) => Number(lot.id) === Number(activeLotId.value)) ?? null,
+);
+
+const activeQuestionKey = computed(() =>
+  isMultipleLot.value ? String(activeLotId.value ?? '') : 'general',
+);
+
+const questions = computed({
+  get: () => questionsByLot.value[activeQuestionKey.value] ?? [],
+  set: (rows) => {
+    questionsByLot.value = {
+      ...questionsByLot.value,
+      [activeQuestionKey.value]: rows,
+    };
+  },
+});
 
 function newRow(question = '', response_type = 'YES_NO') {
   return {
@@ -149,6 +239,71 @@ function removeQuestion(index) {
   questions.value.splice(index, 1);
 }
 
+function lotQuestionCount(lotId) {
+  return (questionsByLot.value[String(lotId)] ?? []).filter((row) => row.question?.trim()).length;
+}
+
+function normalizeQuestion(value) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[?]+$/, '');
+}
+
+async function generateQuestions() {
+  if (generating.value) return;
+
+  generating.value = true;
+  suggestError.value = '';
+
+  const existingQuestions = questions.value
+    .filter((row) => row.question?.trim())
+    .map((row) => ({
+      question: row.question.trim(),
+      response_type: row.response_type || 'YES_NO',
+    }));
+
+  const { data, status, error } = await suggestTenderTechnicalEligibilityQuestions(props.tenderUuid, {
+    ...(isMultipleLot.value && activeLotId.value
+      ? { procurementrequestitem_id: Number(activeLotId.value) }
+      : {}),
+    existing_questions: existingQuestions,
+  });
+  generating.value = false;
+
+  if (!status?.value) {
+    suggestError.value =
+      error?.value?.data?.message
+      || data?.value?.message
+      || 'Could not generate technical eligibility questions. Please try again.';
+    return;
+  }
+
+  const suggestions = data.value?.data?.questions ?? [];
+  const populatedRows = questions.value.filter((row) => row.question?.trim());
+  const seen = new Set(populatedRows.map((row) => normalizeQuestion(row.question)));
+  const newRows = [];
+
+  for (const suggestion of suggestions) {
+    const normalized = normalizeQuestion(suggestion.question);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    newRows.push(newRow(suggestion.question, suggestion.response_type ?? 'YES_NO'));
+  }
+
+  questions.value = [...populatedRows, ...newRows];
+
+  if (newRows.length === 0) {
+    suggestError.value = 'The AI did not return any new technical questions that were not already listed.';
+    if (questions.value.length === 0) questions.value = [newRow()];
+    return;
+  }
+
+  toast.success({
+    title: 'Technical questions drafted',
+    message: `${newRows.length} editable technical question${newRows.length === 1 ? '' : 's'} added.`,
+    position: 'topRight',
+    layout: 2,
+  });
+}
+
 function clearRowErrors() {
   for (const key of Object.keys(rowErrors)) {
     delete rowErrors[key];
@@ -157,38 +312,60 @@ function clearRowErrors() {
 
 function validateClient() {
   clearRowErrors();
-  let valid = true;
+  const sets = isMultipleLot.value
+    ? lots.value.map((lot) => ({
+        lot,
+        rows: questionsByLot.value[String(lot.id)] ?? [],
+      }))
+    : [{ lot: null, rows: questions.value }];
 
-  if (questions.value.length === 0) {
-    errorMessage.value = 'Add at least one technical eligibility question.';
-    return false;
+  for (const set of sets) {
+    if (set.rows.length === 0) {
+      if (set.lot) activeLotId.value = set.lot.id;
+      errorMessage.value = set.lot
+        ? `Add at least one technical eligibility question for Lot ${set.lot.lot_number}.`
+        : 'Add at least one technical eligibility question.';
+      return false;
+    }
+
+    let setValid = true;
+    for (const row of set.rows) {
+      const errs = {};
+      if (!row.question?.trim()) {
+        errs.question = 'Question text is required.';
+        setValid = false;
+      }
+      if (!row.response_type) {
+        errs.response_type = 'Select a response type.';
+        setValid = false;
+      }
+      if (Object.keys(errs).length) rowErrors[row._key] = errs;
+    }
+
+    if (!setValid) {
+      if (set.lot) activeLotId.value = set.lot.id;
+      errorMessage.value = set.lot
+        ? `Complete every question for Lot ${set.lot.lot_number} before continuing.`
+        : 'Complete every question before continuing.';
+      return false;
+    }
   }
 
-  for (const row of questions.value) {
-    const errs = {};
-    if (!row.question?.trim()) {
-      errs.question = 'Question text is required.';
-      valid = false;
-    }
-    if (!row.response_type) {
-      errs.response_type = 'Select a response type.';
-      valid = false;
-    }
-    if (Object.keys(errs).length) {
-      rowErrors[row._key] = errs;
-    }
-  }
-
-  if (!valid) {
-    errorMessage.value = 'Complete every question before continuing.';
-  } else {
-    errorMessage.value = '';
-  }
-
-  return valid;
+  errorMessage.value = '';
+  return true;
 }
 
 function buildPayload() {
+  if (isMultipleLot.value) {
+    return lots.value.flatMap((lot) =>
+      (questionsByLot.value[String(lot.id)] ?? []).map((row) => ({
+        procurementrequestitem_id: Number(lot.id),
+        question: row.question.trim(),
+        response_type: row.response_type,
+      })),
+    );
+  }
+
   return questions.value.map((row) => ({
     question: row.question.trim(),
     response_type: row.response_type,
@@ -233,10 +410,28 @@ async function load() {
     return;
   }
   const payload = data.value?.data ?? {};
-  const rows = payload.questions ?? [];
-  questions.value = rows.length
-    ? rows.map((r) => newRow(r.question ?? '', r.response_type ?? 'YES_NO'))
-    : [newRow()];
+  isMultipleLot.value = Boolean(payload.is_multiple_lot);
+  lots.value = payload.lots ?? [];
+
+  if (isMultipleLot.value) {
+    const grouped = {};
+    for (const lot of lots.value) {
+      const rows = lot.questions ?? [];
+      grouped[String(lot.id)] = rows.length
+        ? rows.map((row) => newRow(row.question ?? '', row.response_type ?? 'YES_NO'))
+        : [newRow()];
+    }
+    questionsByLot.value = grouped;
+    activeLotId.value = lots.value[0]?.id ?? null;
+  } else {
+    const rows = payload.questions ?? [];
+    questionsByLot.value = {
+      general: rows.length
+        ? rows.map((row) => newRow(row.question ?? '', row.response_type ?? 'YES_NO'))
+        : [newRow()],
+    };
+    activeLotId.value = null;
+  }
   loading.value = false;
 }
 
