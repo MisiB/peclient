@@ -1,14 +1,23 @@
 <template>
-  <div v-if="store.supplementWorkflowActions.length" class="inline-flex">
-    <button class="btn btn-primary btn-sm" @click="openPanel">
-      <Icon name="lucide:gavel" />
-      Action
+  <div v-if="store.supplementWorkflowActions.length" class="flex flex-wrap justify-end gap-2">
+    <button v-if="canHandlerRecommend" class="btn btn-primary btn-sm" @click="openPanel">
+      <Icon name="lucide:clipboard-check" />
+      Submit Recommendation
+    </button>
+    <button
+      v-for="action in nonRecommendActions"
+      :key="action"
+      :class="['btn btn-sm', actionClass(action)]"
+      @click="openAction(action)"
+    >
+      <Icon :name="actionIcon(action)" />
+      {{ actionLabel(action) }}
     </button>
 
-    <dialog :id="panelDialogId" class="modal">
+    <dialog v-if="canHandlerRecommend" :id="panelDialogId" class="modal">
       <div class="modal-box max-w-3xl">
         <div class="flex items-center justify-between border-b border-base-200 pb-2">
-          <h3 class="text-lg font-bold">Available Actions</h3>
+          <h3 class="text-lg font-bold">Prepare Recommendation</h3>
           <div class="flex items-center gap-2">
             <span class="text-xs text-base-content/60">Stage: {{ formatStatus(supplement?.status) }}</span>
             <button class="btn btn-ghost btn-circle" @click="closePanel">
@@ -17,7 +26,7 @@
           </div>
         </div>
 
-        <div v-if="canHandlerRecommend" class="mt-3 space-y-3">
+        <div class="mt-3 space-y-3">
           <p class="text-sm">Write your recommendation for this supplement.</p>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label class="flex items-center gap-2 cursor-pointer rounded border border-base-200 p-3" :class="{ 'border-success bg-success/10': handlerForm.recommendation === 'APPROVE' }">
@@ -53,30 +62,6 @@
             <button class="btn btn-primary btn-sm" :disabled="!canSubmitHandler || saving" @click="submitHandlerRecommend">
               <span v-if="saving">Submitting...</span>
               <span v-else>Submit recommendation</span>
-            </button>
-          </div>
-        </div>
-
-        <div v-else class="mt-3 space-y-3">
-          <p v-if="latestRecommendation" class="text-sm">
-            <span class="font-medium">Handler recommendation:</span>
-            <span :class="['badge ml-2', latestRecommendation.handler_recommendation === 'APPROVE' ? 'badge-success' : 'badge-warning']">
-              {{ latestRecommendation.handler_recommendation === 'APPROVE' ? 'Approve' : 'Send Back' }}
-            </span>
-          </p>
-          <p v-if="latestRecommendation?.handler_comment" class="text-sm italic text-base-content/70">
-            "{{ latestRecommendation.handler_comment }}"
-          </p>
-
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="action in nonRecommendActions"
-              :key="action"
-              :class="['btn btn-sm', actionClass(action)]"
-              @click="openAction(action)"
-            >
-              <Icon :name="actionIcon(action)" />
-              {{ actionLabel(action) }}
             </button>
           </div>
         </div>
@@ -154,20 +139,12 @@ const COMMENT_REQUIRED = new Set([
   'manager_disagree',
   'approver_send_back_to_manager',
   'approver_send_back_to_pe',
-  'review_send_back',
-  'approve_send_back',
 ]);
 
 const canHandlerRecommend = computed(() => store.supplementWorkflowActions.includes('handler_recommend'));
 const nonRecommendActions = computed(() =>
   store.supplementWorkflowActions.filter((a) => a !== 'handler_recommend'),
 );
-const latestRecommendation = computed(() => {
-  const all = props.supplement?.recommendations ?? [];
-  if (!all.length) return null;
-  return [...all].sort((a, b) => (b.cycle ?? 0) - (a.cycle ?? 0))[0];
-});
-
 const canSubmitHandler = computed(() =>
   ['APPROVE', 'SEND_BACK'].includes(handlerForm.recommendation)
     && handlerForm.comment.trim().length > 0
@@ -176,11 +153,7 @@ const canSubmitHandler = computed(() =>
 const commentRequired = computed(() => COMMENT_REQUIRED.has(activeAction.value));
 
 const actionLabel = (a) => ({
-  submit_for_review: 'Submit for Review',
-  review_approve: 'Approve Review',
-  review_send_back: 'Send Back to Creator',
-  approve: 'Approve & forward to admin',
-  approve_send_back: 'Send Back to Reviewer',
+  submit_for_authorization: 'Submit to Authority',
   manager_agree: 'Agree & forward to approver',
   manager_disagree: 'Disagree (send back to handler)',
   approver_approve: 'Approve & merge into plan',
@@ -189,11 +162,7 @@ const actionLabel = (a) => ({
 })[a] ?? a;
 
 const actionIcon = (a) => ({
-  submit_for_review: 'lucide:send',
-  review_approve: 'lucide:check-circle',
-  review_send_back: 'lucide:undo-2',
-  approve: 'lucide:check-circle',
-  approve_send_back: 'lucide:undo-2',
+  submit_for_authorization: 'lucide:send',
   manager_agree: 'lucide:check-circle',
   manager_disagree: 'lucide:undo-2',
   approver_approve: 'lucide:check-circle',
@@ -202,11 +171,7 @@ const actionIcon = (a) => ({
 })[a] ?? 'lucide:circle';
 
 const actionClass = (a) => ({
-  submit_for_review: 'btn-success',
-  review_approve: 'btn-success',
-  review_send_back: 'btn-warning',
-  approve: 'btn-success',
-  approve_send_back: 'btn-warning',
+  submit_for_authorization: 'btn-success',
   manager_agree: 'btn-success',
   manager_disagree: 'btn-warning',
   approver_approve: 'btn-success',
@@ -215,11 +180,7 @@ const actionClass = (a) => ({
 })[a] ?? 'btn-primary';
 
 const actionDescription = (a) => ({
-  submit_for_review: 'Move the supplement into the PE review queue.',
-  review_approve: 'Approve the review and forward to internal approval.',
-  review_send_back: 'Return to the creator. A comment is required.',
-  approve: 'Approve and forward to admin handler.',
-  approve_send_back: 'Bounce back to PE reviewer. A comment is required.',
+  submit_for_authorization: 'Submit the supplement directly to the assigned authority handler.',
   manager_agree: 'Agree with the recommendation and forward to the approver.',
   manager_disagree: 'Disagree; the supplement returns to the handler. A comment is required.',
   approver_approve: 'Approve and merge supplement items into the plan.',
@@ -300,7 +261,6 @@ const confirm = async () => {
   saving.value = false;
   if (ok) {
     closeAction();
-    closePanel();
   }
 };
 </script>

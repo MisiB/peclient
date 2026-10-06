@@ -7,8 +7,6 @@
           <select v-model="statusFilter" class="select select-bordered select-sm" @change="reload">
             <option value="">All</option>
             <option value="DRAFT">Draft</option>
-            <option value="PENDING_REVIEW">Pending Review</option>
-            <option value="PENDING_INTERNAL_APPROVAL">Pending Internal Approval</option>
             <option value="PENDING_ADMIN_AUTHORIZATION">Pending Admin Authorization</option>
             <option value="PENDING_MANAGER_REVIEW">Pending Manager Review</option>
             <option value="PENDING_APPROVER_DECISION">Pending Approver Decision</option>
@@ -55,6 +53,11 @@
               <td class="text-right">
                 <div class="flex justify-end gap-1">
                   <SupplementsDetail :plan-uuid="planUuid" :supplement="s" />
+                  <SupplementsEdit
+                    v-if="s.status === 'DRAFT' && canEditDraft(s)"
+                    :plan-uuid="planUuid"
+                    :supplement="s"
+                  />
                   <button
                     v-if="s.status === 'DRAFT' && canDeleteDraft(s)"
                     class="btn btn-ghost btn-xs text-error"
@@ -97,6 +100,7 @@ const { user } = useSanctumAuth();
 const currentUserId = computed(() => user.value?.data?.user?.id ?? null);
 
 const canDeleteDraft = (s) => s.requested_by === currentUserId.value;
+const canEditDraft = canDeleteDraft;
 
 const rowNumber = (i) => ((store.supplementsMeta.current_page - 1) * store.supplementsMeta.per_page) + i + 1;
 
@@ -115,8 +119,6 @@ const formatStatus = (s) => {
 
 const statusBadge = (s) => ({
   DRAFT: 'badge-ghost',
-  PENDING_REVIEW: 'badge-warning badge-outline',
-  PENDING_INTERNAL_APPROVAL: 'badge-warning',
   PENDING_ADMIN_AUTHORIZATION: 'badge-info badge-outline',
   PENDING_MANAGER_REVIEW: 'badge-info',
   PENDING_APPROVER_DECISION: 'badge-info',

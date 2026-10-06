@@ -3,7 +3,7 @@
     <div class="flex items-start justify-between gap-3">
       <div>
         <h1 class="text-xl font-bold">New Tender</h1>
-        <p class="text-xs text-base-content/60">Create a tender in {{ TOTAL_STEPS }} steps.</p>
+        <p class="text-xs text-base-content/60">Create a tender in {{ wizardSteps.length }} steps.</p>
       </div>
       <NuxtLink to="/dashboard" class="btn btn-ghost btn-sm">
         <Icon name="lucide:arrow-left" class="h-4 w-4" />
@@ -13,75 +13,85 @@
 
     <ul class="steps steps-horizontal w-full overflow-x-auto text-xs sm:text-sm">
       <li
-        v-for="(label, i) in STEP_LABELS"
-        :key="i"
+        v-for="(wizardStep, i) in wizardSteps"
+        :key="wizardStep.id"
         class="step"
-        :class="{ 'step-primary': step >= i + 1 }"
+        :class="{ 'step-primary': currentStepIndex >= i }"
       >
-        {{ label }}
+        {{ wizardStep.label }}
       </li>
     </ul>
 
     <TendersAppItemsStep
-      v-if="step === 2"
+      v-if="currentStepId === 'items'"
       :tender-uuid="tenderUuid"
       @saved="onStep2Saved"
       @back="onStep2Back"
     />
 
-    <TendersDocumentEligibilityStep
-      v-else-if="step === 3"
+    <TendersEligibilityCriteriaStep
+      v-else-if="currentStepId === 'eligibility'"
       :tender-uuid="tenderUuid"
       @saved="onStep3Saved"
       @back="onStep3Back"
     />
 
-    <TendersEligibilityFormsStep
-      v-else-if="step === 4"
+    <TendersTechnicalEligibilityStep
+      v-else-if="currentStepId === 'technical'"
       :tender-uuid="tenderUuid"
       @saved="onStep4Saved"
       @back="onStep4Back"
     />
 
-    <TendersTechnicalEligibilityStep
-      v-else-if="step === 5"
+    <TendersFinancialTemplateStep
+      v-else-if="currentStepId === 'finance'"
       :tender-uuid="tenderUuid"
       @saved="onStep5Saved"
       @back="onStep5Back"
     />
 
-    <TendersFinancialTemplateStep
-      v-else-if="step === 6"
+    <TendersDatesManagementStep
+      v-else-if="currentStepId === 'dates'"
       :tender-uuid="tenderUuid"
       @saved="onStep6Saved"
       @back="onStep6Back"
     />
 
-    <TendersDatesManagementStep
-      v-else-if="step === 7"
+    <TendersSbdCreateStep
+      v-else-if="currentStepId === 'sbd'"
       :tender-uuid="tenderUuid"
       @saved="onStep7Saved"
       @back="onStep7Back"
     />
 
-    <TendersSbdCreateStep
-      v-else-if="step === 8"
+    <TendersComplianceAnalysisStep
+      v-else-if="currentStepId === 'analysis'"
       :tender-uuid="tenderUuid"
       @saved="onStep8Saved"
       @back="onStep8Back"
     />
 
-    <TendersComplianceAnalysisStep
-      v-else-if="step === 9"
-      :tender-uuid="tenderUuid"
-      @saved="onStep9Saved"
-      @back="onStep9Back"
-    />
+    <div v-else-if="currentStepId === 'eoi'" class="space-y-4">
+      <TendersConsultancyEoiPanel
+        v-if="tenderUuid && tender"
+        :tender-uuid="tenderUuid"
+        :tender="tender"
+        @updated="onEoiUpdated"
+        @status-change="eoiStatus = $event"
+      />
+      <div class="flex items-center justify-between border-t border-base-200 pt-4">
+        <button type="button" class="btn" @click="goBack"><Icon name="lucide:arrow-left" class="h-4 w-4" />Back</button>
+        <div class="text-right">
+          <p v-if="eoiStatus !== 'EVALUATED'" class="mb-2 text-xs text-base-content/60">Complete the EOI evaluation and shortlist before continuing.</p>
+          <button type="button" class="btn btn-primary" :disabled="eoiStatus !== 'EVALUATED'" @click="goNext">Continue<Icon name="lucide:arrow-right" class="h-4 w-4" /></button>
+        </div>
+      </div>
+    </div>
 
     <div v-else class="card bg-base-100 shadow-sm border border-base-200">
       <div class="card-body">
         <TendersRequestDetailsStep
-          v-if="step === 1"
+          v-if="currentStepId === 'request'"
           :mode="tenderUuid ? 'edit' : 'create'"
           :tender-uuid="tenderUuid"
           @saved="onStep1Saved"
@@ -96,13 +106,13 @@
           </div>
 
           <div class="flex items-center justify-between">
-            <button class="btn" :disabled="step <= 1" @click="goBack">Back</button>
+            <button class="btn" :disabled="currentStepIndex <= 0" @click="goBack">Back</button>
             <div class="flex items-center gap-2">
               <span v-if="tenderUuid" class="text-xs text-base-content/60">
                 Draft: <span class="font-mono">{{ tenderUuid }}</span>
               </span>
               <button
-                v-if="step < TOTAL_STEPS"
+                v-if="currentStepIndex < wizardSteps.length - 1"
                 class="btn btn-primary"
                 @click="goNext"
               >
@@ -124,18 +134,15 @@ definePageMeta({
 
 useHead({ title: 'New Tender' })
 
-const TOTAL_STEPS = 9
-
-const STEP_LABELS = [
-  'Request details',
-  'Line items',
-  'Document eligibility',
-  'Eligibility Forms',
-  'Technical Eligibility',
-  'Finance',
-  'Dates management',
-  'SBD create',
-  'Preview & Analysis',
+const BASE_STEPS = [
+  { id: 'request', label: 'Request details' },
+  { id: 'items', label: 'Line items' },
+  { id: 'eligibility', label: 'Eligibility criteria' },
+  { id: 'technical', label: 'Technical Eligibility' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'dates', label: 'Dates management' },
+  { id: 'sbd', label: 'SBD create' },
+  { id: 'analysis', label: 'Preview & Analysis' },
 ]
 
 const { guardPage } = useCheckPermission('tenders')
@@ -146,109 +153,113 @@ onMounted(async () => {
 
 const route = useRoute()
 
-const step = ref(1)
+const currentStepId = ref('request')
 const tenderUuid = ref('')
+const tender = ref(null)
+const eoiRequired = ref(false)
+const eoiStatus = ref('NOT_STARTED')
+const { getTender, getTenderConsultancyEoi } = useTenderHelper()
 
-const currentStepLabel = computed(() => STEP_LABELS[step.value - 1] ?? `Step ${step.value}`)
+const wizardSteps = computed(() => {
+  const steps = [...BASE_STEPS]
+  if (eoiRequired.value) steps.splice(2, 0, { id: 'eoi', label: 'Expression of Interest' })
+  return steps
+})
+const currentStepIndex = computed(() => Math.max(0, wizardSteps.value.findIndex(item => item.id === currentStepId.value)))
+const currentStepLabel = computed(() => wizardSteps.value[currentStepIndex.value]?.label ?? 'Tender step')
 
 const getDraftStorageKey = (uuid) => `peclient:tenders:draft:${uuid}:step`
 
 function onStep1Saved(payload) {
   tenderUuid.value = payload?.uuid ?? ''
-  step.value = 2
+  tender.value = payload?.tender ?? null
+  eoiRequired.value = Boolean(payload?.tender?.consultancy_eoi?.required)
+  currentStepId.value = 'items'
   persistDraftStep()
 }
 
-function onStep2Saved() {
-  step.value = 3
+async function onStep2Saved(payload) {
+  eoiRequired.value = Boolean(payload?.eoiRequired)
+  await refreshTender()
+  currentStepId.value = eoiRequired.value ? 'eoi' : 'eligibility'
   persistDraftStep()
 }
 
 function onStep2Back() {
-  step.value = 1
+  currentStepId.value = 'request'
   persistDraftStep()
 }
 
 function onStep3Saved() {
-  step.value = 4
+  currentStepId.value = 'technical'
   persistDraftStep()
 }
 
 function onStep3Back() {
-  step.value = 2
+  currentStepId.value = eoiRequired.value ? 'eoi' : 'items'
   persistDraftStep()
 }
 
 function onStep4Saved() {
-  step.value = 5
+  currentStepId.value = 'finance'
   persistDraftStep()
 }
 
 function onStep4Back() {
-  step.value = 3
+  currentStepId.value = 'eligibility'
   persistDraftStep()
 }
 
 function onStep5Saved() {
-  step.value = 6
+  currentStepId.value = 'dates'
   persistDraftStep()
 }
 
 function onStep5Back() {
-  step.value = 4
+  currentStepId.value = 'technical'
   persistDraftStep()
 }
 
 function onStep6Saved() {
-  step.value = 7
+  currentStepId.value = 'sbd'
   persistDraftStep()
 }
 
 function onStep6Back() {
-  step.value = 5
+  currentStepId.value = 'finance'
   persistDraftStep()
 }
 
 function onStep7Saved() {
-  step.value = 8
+  currentStepId.value = 'analysis'
   persistDraftStep()
 }
 
 function onStep7Back() {
-  step.value = 6
+  currentStepId.value = 'dates'
   persistDraftStep()
 }
 
 function onStep8Saved() {
-  step.value = 9
-  persistDraftStep()
+  clearDraftStep()
+  navigateTo('/tenders/awaiting-approval')
 }
 
 function onStep8Back() {
-  step.value = 7
-  persistDraftStep()
-}
-
-function onStep9Saved() {
-  persistDraftStep()
-  navigateTo('/tenders')
-}
-
-function onStep9Back() {
-  step.value = 8
+  currentStepId.value = 'sbd'
   persistDraftStep()
 }
 
 function goBack() {
-  if (step.value > 1) {
-    step.value--
+  if (currentStepIndex.value > 0) {
+    currentStepId.value = wizardSteps.value[currentStepIndex.value - 1].id
     persistDraftStep()
   }
 }
 
 function goNext() {
-  if (step.value < TOTAL_STEPS) {
-    step.value++
+  if (currentStepIndex.value < wizardSteps.value.length - 1) {
+    currentStepId.value = wizardSteps.value[currentStepIndex.value + 1].id
     persistDraftStep()
   }
 }
@@ -257,33 +268,72 @@ function persistDraftStep() {
   if (!process.client) return
   if (!tenderUuid.value) return
   try {
-    window.localStorage.setItem(getDraftStorageKey(tenderUuid.value), String(step.value))
+    window.localStorage.setItem(getDraftStorageKey(tenderUuid.value), currentStepId.value)
   } catch {
     // ignore localStorage failures (private mode, disabled storage, etc.)
   }
 }
 
-function restoreDraftFromQuery() {
+function clearDraftStep() {
+  if (!process.client || !tenderUuid.value) return
+  try {
+    window.localStorage.removeItem(getDraftStorageKey(tenderUuid.value))
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+async function refreshTender() {
+  if (!tenderUuid.value) return false
+  const { data, error } = await getTender(tenderUuid.value)
+  if (error.value) return false
+  tender.value = data.value?.data ?? null
+  eoiRequired.value = Boolean(tender.value?.consultancy_eoi?.required)
+  if (eoiRequired.value) {
+    const eoiResult = await getTenderConsultancyEoi(tenderUuid.value)
+    eoiStatus.value = eoiResult.error.value
+      ? 'NOT_STARTED'
+      : eoiResult.data.value?.data?.status ?? 'NOT_STARTED'
+  } else {
+    eoiStatus.value = 'NOT_STARTED'
+  }
+  return true
+}
+
+function onEoiUpdated(value) {
+  eoiStatus.value = value?.status ?? eoiStatus.value
+  refreshTender()
+}
+
+async function restoreDraftFromQuery() {
   const uuid = String(route.query?.draft ?? '').trim()
   if (!uuid) return
 
   tenderUuid.value = uuid
+  await refreshTender()
   if (!process.client) return
 
   try {
     const raw = window.localStorage.getItem(getDraftStorageKey(uuid))
-    const savedStep = Number(raw)
-    if (Number.isFinite(savedStep) && savedStep >= 1 && savedStep <= TOTAL_STEPS) {
-      step.value = savedStep
+    const legacyIds = BASE_STEPS.map(item => item.id)
+    const legacyNumber = Number(raw)
+    const savedStepId = legacyIds.includes(raw) || raw === 'eoi' ? raw : legacyIds[legacyNumber - 1]
+    const eoiMustBeCompleted = eoiRequired.value
+      && eoiStatus.value !== 'EVALUATED'
+      && !['request', 'items', 'eoi'].includes(savedStepId)
+    if (eoiMustBeCompleted) {
+      currentStepId.value = 'eoi'
+    } else if (wizardSteps.value.some(item => item.id === savedStepId)) {
+      currentStepId.value = savedStepId
     } else {
-      step.value = 2 // assume step 1 was already saved to create the draft
+      currentStepId.value = 'items'
     }
   } catch {
-    step.value = 2
+    currentStepId.value = 'items'
   }
 }
 
-watch(step, () => persistDraftStep())
+watch(currentStepId, () => persistDraftStep())
 
 onMounted(() => restoreDraftFromQuery())
 </script>

@@ -107,13 +107,14 @@
     </label>
 
     <label class="fieldset">
-      <span class="fieldset-legend" title="ONCE OFF consumes the full budget when procurement starts. DRILL DOWN draws down piece-by-piece (e.g. framework / call-off contracts).">
-        Consumption Mode
-      </span>
-      <select v-model="form.consumption_mode" class="select select-bordered w-full">
-        <option value="ONCE_OFF">Once off</option>
-        <option value="DRILL_DOWN">Drill down</option>
+      <span class="fieldset-legend">Award Type</span>
+      <select v-model="form.award_type" class="select select-bordered w-full">
+        <option value="AWARD">Award</option>
+        <option value="FRAMEWORK">Framework</option>
       </select>
+      <label v-if="errors.award_type" class="label">
+        <span class="label-text-alt text-red-600">{{ errors.award_type }}</span>
+      </label>
     </label>
 
     <label class="fieldset">
@@ -151,7 +152,7 @@
     <!-- Y/N flags -->
     <div class="md:col-span-3">
       <div class="text-sm font-semibold text-base-content/70">Flags</div>
-      <div class="mt-1 grid grid-cols-2 gap-2 md:grid-cols-6">
+      <div class="mt-1 grid grid-cols-2 gap-2 md:grid-cols-5">
         <label class="label cursor-pointer justify-start gap-2">
           <input type="checkbox" v-model="form.pre_qualification" class="checkbox checkbox-sm" />
           <span class="label-text">Pre-Qualification</span>
@@ -162,9 +163,9 @@
         </label>
         <label
           class="label justify-start gap-2"
-          title="Auto-flagged when the chosen method is subject to SPOC oversight, or when the item's value exceeds the procurement class's threshold for this method/group. Cannot be set manually."
+          title="Auto-flagged for every Framework agreement, when the chosen method is subject to SPOC oversight, or when the item's value exceeds the procurement class's threshold for this method/group. Cannot be set manually."
         >
-          <input type="checkbox" :checked="!!form.spoc" disabled class="checkbox checkbox-sm" />
+          <input type="checkbox" :checked="form.award_type === 'FRAMEWORK' || !!form.spoc" disabled class="checkbox checkbox-sm" />
           <span class="label-text">
             SPOC
             <span class="text-xs text-base-content/50">(auto)</span>
@@ -177,10 +178,6 @@
         <label class="label cursor-pointer justify-start gap-2">
           <input type="checkbox" v-model="form.affirmative_procurement" class="checkbox checkbox-sm" />
           <span class="label-text">Affirmative</span>
-        </label>
-        <label class="label cursor-pointer justify-start gap-2">
-          <input type="checkbox" v-model="form.procurement_exemption" class="checkbox checkbox-sm" />
-          <span class="label-text">Exemption</span>
         </label>
       </div>
     </div>

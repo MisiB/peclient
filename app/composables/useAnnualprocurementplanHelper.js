@@ -66,22 +66,6 @@ export const useAnnualprocurementplanHelper = () => {
     }
   };
 
-  // Items split into consolidated groups (rows sharing a reference_no) and
-  // standalone individual rows. Accepts the same filter params as getItems.
-  const getGroupedItems = async (planUuid, params = {}) => {
-    try {
-      const qs = new URLSearchParams();
-      for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined && v !== null && v !== '') qs.set(k, v);
-      }
-      const url = `${base}/${planUuid}/items/grouped${qs.toString() ? `?${qs}` : ''}`;
-      const data = await client(url, { method: 'GET' });
-      return { data: ref(data), error: ref(null) };
-    } catch (err) {
-      return { data: ref(null), error: ref(err) };
-    }
-  };
-
   // ─── AI compliance review ───────────────────────────────────────────────
   const getComplianceAnalysis = async (planUuid) => {
     try {
@@ -101,29 +85,40 @@ export const useAnnualprocurementplanHelper = () => {
     }
   };
 
-  const getClassificationMatches = async (planUuid) => {
+  const getClassificationMatches = async (planUuid, scanType = 'NSPL') => {
     try {
-      const data = await client(`${base}/${planUuid}/classification-matches`, { method: 'GET' });
+      const data = await client(`${base}/${planUuid}/classification-matches`, { method: 'GET', query: { scan_type: scanType } });
       return { data: ref(data), error: ref(null) };
     } catch (err) {
       return { data: ref(null), error: ref(err) };
     }
   };
 
-  const startClassificationMatch = async (planUuid) => {
+  const startClassificationMatch = async (planUuid, scanType = 'NSPL') => {
     try {
-      const data = await client(`${base}/${planUuid}/classification-matches/run`, { method: 'POST' });
+      const data = await client(`${base}/${planUuid}/classification-matches/run`, { method: 'POST', body: { scan_type: scanType } });
       return { data: ref(data), status: ref(true), error: ref(null) };
     } catch (err) {
       return { data: ref(null), status: ref(false), error: ref(err) };
     }
   };
 
-  const decideClassificationMatch = async (planUuid, matchId, decision) => {
+  const acceptClassificationMatches = async (planUuid, runId, matches) => {
+    try {
+      const data = await client(`${base}/${planUuid}/classification-matches/accept-bulk`, {
+        method: 'PATCH', body: { run_id: runId, matches },
+      });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const decideClassificationMatch = async (planUuid, matchId, decision, nsplProductId = null) => {
     try {
       const data = await client(`${base}/${planUuid}/classification-matches/${matchId}`, {
         method: 'PATCH',
-        body: { decision },
+        body: { decision, ...(nsplProductId ? { nspl_product_id: nsplProductId } : {}) },
       });
       return { data: ref(data), status: ref(true), error: ref(null) };
     } catch (err) {
@@ -143,20 +138,6 @@ export const useAnnualprocurementplanHelper = () => {
   const sendComplianceChat = async (planUuid, message) => {
     try {
       const data = await client(`${base}/${planUuid}/compliance-chat`, { method: 'POST', body: { message } });
-      return { data: ref(data), status: ref(true), error: ref(null) };
-    } catch (err) {
-      return { data: ref(null), status: ref(false), error: ref(err) };
-    }
-  };
-
-  // Set or clear a consolidation group's custom name. A blank name reverts to
-  // the auto-derived one.
-  const setConsolidationName = async (planUuid, referenceNo, name) => {
-    try {
-      const data = await client(`${base}/${planUuid}/consolidation-name`, {
-        method: 'PUT',
-        body: { reference_no: referenceNo, name },
-      });
       return { data: ref(data), status: ref(true), error: ref(null) };
     } catch (err) {
       return { data: ref(null), status: ref(false), error: ref(err) };
@@ -194,6 +175,15 @@ export const useAnnualprocurementplanHelper = () => {
   const getItemTotalsByFlag = async (planUuid, params = {}) => {
     try {
       const data = await client(`${base}/${planUuid}/totals/flags${totalsQs(params)}`, { method: 'GET' });
+      return { data: ref(data), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), error: ref(err) };
+    }
+  };
+
+  const getItemTotalsByAwardType = async (planUuid, params = {}) => {
+    try {
+      const data = await client(`${base}/${planUuid}/totals/awards${totalsQs(params)}`, { method: 'GET' });
       return { data: ref(data), error: ref(null) };
     } catch (err) {
       return { data: ref(null), error: ref(err) };
@@ -360,6 +350,15 @@ export const useAnnualprocurementplanHelper = () => {
   const createSupplement = async (planUuid, payload) => {
     try {
       const data = await client(`${base}/${planUuid}/supplements`, { method: 'POST', body: payload });
+      return { data: ref(data), status: ref(true), error: ref(null) };
+    } catch (err) {
+      return { data: ref(null), status: ref(false), error: ref(err) };
+    }
+  };
+
+  const updateSupplement = async (planUuid, uuid, payload) => {
+    try {
+      const data = await client(`${base}/${planUuid}/supplements/${uuid}`, { method: 'PUT', body: payload });
       return { data: ref(data), status: ref(true), error: ref(null) };
     } catch (err) {
       return { data: ref(null), status: ref(false), error: ref(err) };
@@ -882,30 +881,6 @@ export const useAnnualprocurementplanHelper = () => {
     }
   };
 
-  // ─── Imports ────────────────────────────────────────────────────────────
-  const startImport = async (planUuid, file) => {
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const data = await client(`${base}/${planUuid}/items/import`, {
-        method: 'POST',
-        body: fd,
-      });
-      return { data: ref(data), status: ref(true), error: ref(null) };
-    } catch (err) {
-      return { data: ref(null), status: ref(false), error: ref(err) };
-    }
-  };
-
-  const getImport = async (planUuid, importUuid) => {
-    try {
-      const data = await client(`${base}/${planUuid}/imports/${importUuid}`, { method: 'GET' });
-      return { data: ref(data), error: ref(null) };
-    } catch (err) {
-      return { data: ref(null), error: ref(err) };
-    }
-  };
-
   // ─── Plan analysis ───────────────────────────────────────────────────────
   const analyzePlan = async (planUuid) => {
     try {
@@ -1030,18 +1005,18 @@ export const useAnnualprocurementplanHelper = () => {
     updatePlan,
     deletePlan,
     getItems,
-    getGroupedItems,
-    setConsolidationName,
     getComplianceAnalysis,
     startComplianceAnalysis,
     getClassificationMatches,
     startClassificationMatch,
     decideClassificationMatch,
+    acceptClassificationMatches,
     getComplianceChat,
     sendComplianceChat,
     getItemTotals,
     getItemTotalsByGroup,
     getItemTotalsByFlag,
+    getItemTotalsByAwardType,
     createItem,
     updateItem,
     deleteItem,
@@ -1103,6 +1078,7 @@ export const useAnnualprocurementplanHelper = () => {
     listSupplements,
     showSupplement,
     createSupplement,
+    updateSupplement,
     deleteSupplement,
     addSupplementItem,
     updateSupplementItem,
@@ -1110,8 +1086,6 @@ export const useAnnualprocurementplanHelper = () => {
     supplementTransition,
     getSupplementWorkflowActions,
     getSupplementEligibleNextActors,
-    startImport,
-    getImport,
     getUnresolved,
     resolveLookup,
     getProcurementClasses,

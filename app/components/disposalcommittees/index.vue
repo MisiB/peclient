@@ -15,9 +15,6 @@
           <option :value="100">100 / page</option>
         </select>
       </div>
-      <div>
-        <DisposalcommitteesAdd v-if="canAdd" :plan-uuid="planUuid" />
-      </div>
     </div>
 
     <div v-if="store.disposalCommitteeMembersLoading" class="flex justify-center py-10">
@@ -35,12 +32,11 @@
             <th>Phone</th>
             <th>Role</th>
             <th>Account</th>
-            <th class="text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="!store.disposalCommitteeMembers.length">
-            <td colspan="8" class="text-center text-base-content/50">
+            <td colspan="7" class="text-center text-base-content/50">
               {{ search ? 'No members match your search.' : 'No committee members yet.' }}
             </td>
           </tr>
@@ -55,12 +51,6 @@
               <span :class="['badge badge-sm', m.user?.email_verified_at ? 'badge-success' : 'badge-warning']">
                 {{ m.user?.email_verified_at ? 'Active' : 'Pending' }}
               </span>
-            </td>
-            <td class="text-right">
-              <div class="flex justify-end gap-1">
-                <DisposalcommitteesEdit v-if="canEdit" :plan-uuid="planUuid" :item="m" />
-                <DisposalcommitteesDelete v-if="canDelete" :plan-uuid="planUuid" :item="m" />
-              </div>
             </td>
           </tr>
         </tbody>

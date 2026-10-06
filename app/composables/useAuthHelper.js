@@ -98,6 +98,22 @@ export const useAuthHelper = () => {
     }
   };
 
+  const changeTemporaryPassword = async (payload) => {
+    try {
+      const response = await withCsrfRetry(() =>
+        client('/api/auth/change-temporary-password', {
+          method: 'POST',
+          body: payload,
+        }),
+      );
+      await refreshIdentity();
+
+      return { ok: true, data: response, error: null };
+    } catch (error) {
+      return { ok: false, data: null, error: handleApiError(error) };
+    }
+  };
+
   const requestPasswordReset = async (payload) => {
     try {
       const response = await withCsrfRetry(() =>
@@ -163,6 +179,7 @@ export const useAuthHelper = () => {
     getErrorMessage,
     loginWithPassword,
     logoutUser,
+    changeTemporaryPassword,
     requestPasswordReset,
     resetPassword,
     register,

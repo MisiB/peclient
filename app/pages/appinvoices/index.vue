@@ -219,7 +219,8 @@ const meta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 25 });
 const loading = ref(false);
 const searchInput = ref('');
 const statusFilter = ref('');
-const planFilter = ref('');
+const route = useRoute();
+const planFilter = ref(typeof route.query.plan_uuid === 'string' ? route.query.plan_uuid : '');
 const activeInvoice = ref(null);
 let searchTimer = null;
 
@@ -477,7 +478,10 @@ const printInvoice = (inv) => {
 };
 
 onMounted(async () => {
-  if (!store.items?.length) await store.fetchAll();
-  await fetchList(1);
+  await Promise.all([store.items?.length ? Promise.resolve() : store.fetchAll(), fetchList(1)]);
+  if (planFilter.value && route.query.view === 'invoice') {
+    const invoice = items.value.find(item => item.annualprocurementplan?.uuid === planFilter.value);
+    if (invoice) openView(invoice);
+  }
 });
 </script>

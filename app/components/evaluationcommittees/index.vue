@@ -15,9 +15,6 @@
           <option :value="100">100 / page</option>
         </select>
       </div>
-      <div>
-        <EvaluationcommitteesAdd v-if="canAdd" :plan-uuid="planUuid" />
-      </div>
     </div>
 
     <div v-if="store.committeeMembersLoading" class="flex justify-center py-10">
@@ -64,9 +61,7 @@
             </td>
             <td class="text-right">
               <div class="flex justify-end gap-1">
-                <EvaluationcommitteesMemberDetail :plan-uuid="planUuid" :item="m" :can-edit="canEdit" :can-delete="canDelete" />
-                <EvaluationcommitteesEdit v-if="canEdit" :plan-uuid="planUuid" :item="m" />
-                <EvaluationcommitteesDelete v-if="canDelete" :plan-uuid="planUuid" :item="m" />
+                <EvaluationcommitteesMemberDetail :plan-uuid="planUuid" :item="m" />
               </div>
             </td>
           </tr>

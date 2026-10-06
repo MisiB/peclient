@@ -4,11 +4,11 @@
       <div>
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-lg font-semibold">Preview &amp; compliance analysis</h2>
-          <span class="badge badge-warning badge-sm">Required</span>
+          <span class="badge badge-ghost badge-sm">Optional</span>
         </div>
         <p class="text-sm text-base-content/60">
-          The EGP AI application reviews the information captured in steps 1–8 and combines it with statutory
-          and structural safeguards before publication.
+          Optionally run the EGP AI application to review the information captured in steps 1–8. You can finish
+          the draft review without running this analysis.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -138,21 +138,57 @@
         </div>
       </section>
 
-      <div class="flex justify-end">
-        <button class="btn btn-primary" type="button" @click="finish">
-          Finish draft review
-        </button>
-      </div>
     </template>
 
     <div v-else class="card border border-base-200 bg-base-100 shadow-sm">
       <div class="card-body p-6 text-center text-base-content/60">
-        <p>Run the EGP AI application to preview and analyse all wizard steps before publication.</p>
-        <button class="btn btn-primary btn-sm mt-4" type="button" :disabled="running" @click="runAnalysis">
+        <p>AI preview and analysis is optional. Run it for additional guidance, or finish the draft review now.</p>
+        <button class="btn btn-outline btn-sm mt-4" type="button" :disabled="running" @click="runAnalysis">
           Run AI preview &amp; analysis
         </button>
       </div>
     </div>
+
+    <div class="flex justify-end border-t border-base-200 pt-4">
+      <button class="btn btn-primary" type="button" :disabled="submitting" @click="openSubmissionDialog">
+        <span v-if="submitting" class="loading loading-spinner loading-sm" />
+        Submit for approval
+      </button>
+    </div>
+
+    <dialog ref="submissionDialog" class="modal">
+      <div class="modal-box max-w-lg">
+        <div class="flex items-start gap-3">
+          <div class="rounded-full bg-warning/15 p-2 text-warning">
+            <Icon name="lucide:triangle-alert" class="h-6 w-6" />
+          </div>
+          <div>
+            <h3 class="text-lg font-bold">Send tender for approval?</h3>
+            <p class="mt-2 text-sm text-base-content/70">
+              Are you sure you want to send this tender for approval? It will no longer be editable unless an approver sends it back for corrections.
+            </p>
+          </div>
+        </div>
+
+        <div v-if="submissionError" class="alert alert-error mt-4 py-3 text-sm">
+          <Icon name="lucide:circle-alert" class="h-4 w-4 shrink-0" />
+          <div>
+            <p>{{ submissionError }}</p>
+            <ul v-if="submissionErrors.length" class="mt-1 list-disc pl-4">
+              <li v-for="item in submissionErrors" :key="item">{{ item }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" :disabled="submitting" @click="closeSubmissionDialog">No, keep editing</button>
+          <button type="button" class="btn btn-primary" :disabled="submitting" @click="submitForApproval">
+            <span v-if="submitting" class="loading loading-spinner loading-sm" />
+            Yes, send for approval
+          </button>
+        </div>
+      </div>
+    </dialog>
   </div>
 </template>
 
@@ -166,7 +202,7 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'back']);
 
 const toast = useToast();
-const { getTenderComplianceAnalysis, runTenderComplianceAnalysis } = useTenderHelper();
+const { getTenderComplianceAnalysis, runTenderComplianceAnalysis, transitionTender } = useTenderHelper();
 
 const loading = ref(true);
 const running = ref(false);
@@ -174,6 +210,10 @@ const errorMessage = ref('');
 const report = ref(null);
 const lawKbReady = ref(false);
 const analysisStatus = ref(null);
+const submissionDialog = ref(null);
+const submitting = ref(false);
+const submissionError = ref('');
+const submissionErrors = ref([]);
 let pollTimer = null;
 
 function clearPoll() {
@@ -268,17 +308,42 @@ async function runAnalysis() {
   });
 }
 
-function finish() {
-  if (report.value && (!report.value.can_publish || !report.value.ai_application?.used)) {
-    toast.error({
-      title: 'Cannot finish review',
-      message: 'Resolve the compliance issues and run the AI preview and analysis again.',
+function openSubmissionDialog() {
+  submissionError.value = '';
+  submissionErrors.value = [];
+  submissionDialog.value?.showModal?.();
+}
+
+function closeSubmissionDialog() {
+  if (submitting.value) return;
+  submissionDialog.value?.close?.();
+}
+
+async function submitForApproval() {
+  submitting.value = true;
+  submissionError.value = '';
+  submissionErrors.value = [];
+
+  try {
+    const { data, status, error } = await transitionTender(props.tenderUuid, 'submit_for_approval');
+    if (!status?.value) {
+      const body = error.value?.data;
+      submissionError.value = body?.message || 'The tender could not be submitted for approval.';
+      submissionErrors.value = body?.data?.errors ?? [];
+      return;
+    }
+
+    submissionDialog.value?.close?.();
+    toast.success({
+      title: 'Submitted for approval',
+      message: data.value?.message || 'Approvers in your organisation have been notified.',
       position: 'topRight',
       layout: 2,
     });
-    return;
+    emit('saved');
+  } finally {
+    submitting.value = false;
   }
-  emit('saved');
 }
 
 onMounted(() => load());

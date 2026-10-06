@@ -4,18 +4,14 @@
       <h3 class="text-lg font-bold">{{ title }}</h3>
       <p v-if="appRef" class="mt-1 text-xs text-base-content/60">
         APP reference: <span class="font-mono">{{ appRef }}</span>
-        <span v-if="consumptionMode" class="badge badge-ghost badge-xs ml-2">{{ consumptionMode }}</span>
       </p>
 
       <div v-if="formError" class="alert alert-error mt-3 py-2 text-sm">
         <span>{{ formError }}</span>
       </div>
 
-      <p v-if="consumptionMode === 'ONCE_OFF'" class="mt-2 text-xs text-warning">
-        Once-off APP line — values are taken from the plan as-is. Confirm to add.
-      </p>
-      <p v-else-if="consumptionMode === 'DRILL_DOWN'" class="mt-2 text-xs text-info">
-        Drill-down APP line — you may adjust quantity up to the plan maximum.
+      <p v-if="budgetOnly" class="mt-2 text-xs text-info">
+        Enter how much of the remaining APP budget this tender should consume.
       </p>
 
       <form class="mt-4 space-y-3" @submit.prevent="submit">
@@ -31,7 +27,7 @@
           />
         </label>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div v-if="!budgetOnly" class="grid grid-cols-2 gap-3">
           <label class="form-control w-full">
             <span class="label-text text-xs font-medium">Quantity</span>
             <input
@@ -62,7 +58,23 @@
           </label>
         </div>
 
-        <label class="form-control w-full">
+        <label v-if="budgetOnly" class="form-control w-full">
+          <span class="label-text text-xs font-medium">Amount to consume</span>
+          <input
+            v-model.number="form.total"
+            type="number"
+            min="0.01"
+            :max="maxBudget ?? undefined"
+            step="0.01"
+            class="input input-bordered w-full font-mono"
+            :disabled="submitting"
+          />
+          <span v-if="maxBudget != null" class="mt-1 text-xs text-base-content/50">
+            Available APP budget: {{ formatMoney(maxBudget) }}
+          </span>
+        </label>
+
+        <label v-else class="form-control w-full">
           <span class="label-text text-xs font-medium">Total</span>
           <input
             :value="formatMoney(form.total)"
@@ -72,7 +84,7 @@
           />
         </label>
 
-        <p v-if="maxQuantity != null" class="text-xs text-base-content/50">
+        <p v-if="!budgetOnly && maxQuantity != null" class="text-xs text-base-content/50">
           Maximum quantity from APP line: {{ maxQuantity }}
         </p>
 
@@ -94,11 +106,12 @@ const props = defineProps({
   title: { type: String, default: 'Line item' },
   submitLabel: { type: String, default: 'Save' },
   appRef: { type: String, default: '' },
-  consumptionMode: { type: String, default: '' },
+  budgetOnly: { type: Boolean, default: false },
   descriptionReadonly: { type: Boolean, default: false },
   quantityReadonly: { type: Boolean, default: false },
   unitPriceReadonly: { type: Boolean, default: false },
   maxQuantity: { type: Number, default: null },
+  maxBudget: { type: Number, default: null },
   initial: {
     type: Object,
     default: () => ({
@@ -167,15 +180,25 @@ function setError(msg) {
 
 async function submit() {
   formError.value = ''
+  if (props.budgetOnly && Number(form.total) <= 0) {
+    formError.value = 'Amount to consume must be greater than zero.'
+    return
+  }
+  if (props.budgetOnly && props.maxBudget != null && Number(form.total) > props.maxBudget) {
+    formError.value = `Amount cannot exceed the available APP budget of ${formatMoney(props.maxBudget)}.`
+    return
+  }
   if (props.maxQuantity != null && Number(form.quantity) > props.maxQuantity) {
     formError.value = `Quantity cannot exceed ${props.maxQuantity}.`
     return
   }
-  emit('submit', {
-    description: form.description,
-    quantity: form.quantity,
-    unit_price: form.unit_price,
-  })
+  emit('submit', props.budgetOnly
+    ? { budget_amount: Number(form.total) }
+    : {
+        description: form.description,
+        quantity: form.quantity,
+        unit_price: form.unit_price,
+      })
 }
 
 defineExpose({ open, close, setSubmitting, setError })

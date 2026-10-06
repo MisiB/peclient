@@ -1,6 +1,6 @@
 <template>
   <div class="w-full space-y-4">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div v-if="!embedded" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 class="text-lg font-semibold">Document eligibility</h2>
         <p class="text-sm text-base-content/60">
@@ -27,37 +27,21 @@
       </div>
     </div>
 
-    <div v-else-if="!catalog.length" class="card w-full border border-dashed border-base-200 bg-base-100/50 shadow-sm">
-      <div class="card-body p-10 text-center text-base-content/50">
-        <Icon name="lucide:file-x" class="mx-auto mb-2 h-10 w-10" />
-        <p class="text-sm">No tender documents in your catalog yet.</p>
-        <NuxtLink to="/my-tender-documents" class="btn btn-link btn-sm mt-2">Manage tender documents</NuxtLink>
-      </div>
-    </div>
-
     <div v-else class="card w-full border border-base-200 bg-base-100 shadow-sm">
       <div class="card-body gap-4 p-4 sm:p-6">
-        <input
-          v-model="search"
-          type="text"
-          placeholder="Search catalog…"
-          class="input input-bordered w-full max-w-md"
-        />
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div><h4 class="font-semibold">Selected documents</h4><p class="text-xs text-base-content/60">Only documents added to this tender are shown below.</p></div>
+          <button class="btn btn-primary btn-sm" type="button" :disabled="!catalog.length" @click="openDocumentPicker"><Icon name="lucide:plus" class="h-4 w-4" /> Add documents</button>
+        </div>
 
-        <div class="space-y-3">
+        <div v-if="selectedCatalog.length" class="space-y-3">
           <div
-            v-for="doc in filteredCatalog"
+            v-for="doc in selectedCatalog"
             :key="doc.uuid"
-            class="rounded-lg border border-base-200 p-4"
-            :class="selection[doc.uuid]?.selected ? 'border-primary/40 bg-primary/5' : ''"
+            class="rounded-lg border border-primary/30 bg-primary/5 p-4"
           >
-            <label class="flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                class="checkbox checkbox-primary mt-1"
-                :checked="!!selection[doc.uuid]?.selected"
-                @change="toggleDoc(doc.uuid, $event.target.checked)"
-              />
+            <div class="flex items-start gap-3">
+              <Icon name="lucide:file-check-2" class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-semibold">{{ doc.name }}</span>
@@ -74,10 +58,11 @@
                   Bidder uploads this document with their response.
                 </p>
               </div>
-            </label>
+              <button class="btn btn-ghost btn-xs text-error" type="button" title="Remove document" @click="toggleDoc(doc.uuid, false)"><Icon name="lucide:trash-2" class="h-4 w-4" /> Remove</button>
+            </div>
 
             <div
-              v-if="doc.type === 'PROVIDE' && selection[doc.uuid]?.selected"
+              v-if="doc.type === 'PROVIDE'"
               class="mt-3 ml-9 border-t border-base-200 pt-3"
             >
               <span class="text-xs font-medium text-base-content/70">Attach file for bidders</span>
@@ -98,13 +83,37 @@
           </div>
         </div>
 
-        <p v-if="filteredCatalog.length === 0" class="text-center text-sm text-base-content/50">
-          No documents match your search.
-        </p>
+        <div v-else class="rounded-lg border border-dashed border-base-300 p-8 text-center text-base-content/50">
+          <Icon name="lucide:files" class="mx-auto mb-2 h-9 w-9" />
+          <p class="text-sm">No documents selected for this tender.</p>
+          <button v-if="catalog.length" class="btn btn-link btn-sm mt-1" type="button" @click="openDocumentPicker">Add documents</button>
+          <NuxtLink v-else to="/my-tender-documents" class="btn btn-link btn-sm mt-1">Manage tender documents</NuxtLink>
+        </div>
       </div>
     </div>
 
-    <div class="flex justify-end border-t border-base-200 pt-4">
+    <dialog ref="documentPickerDialog" class="modal">
+      <div class="modal-box max-w-3xl p-0">
+        <div class="flex items-start justify-between gap-3 border-b border-base-200 p-5">
+          <div><h3 class="text-lg font-bold">Add eligibility documents</h3><p class="text-sm text-base-content/60">Select the documents to add to this tender.</p></div>
+          <button class="btn btn-ghost btn-sm btn-circle" type="button" @click="closeDocumentPicker"><Icon name="lucide:x" class="h-5 w-5" /></button>
+        </div>
+        <div class="space-y-4 p-5">
+          <label class="input input-bordered flex items-center gap-2"><Icon name="lucide:search" class="h-4 w-4 opacity-50" /><input v-model.trim="search" type="search" class="grow" placeholder="Search document catalog…"></label>
+          <div class="max-h-[55vh] space-y-2 overflow-y-auto">
+            <label v-for="doc in filteredCatalog" :key="doc.uuid" class="flex cursor-pointer items-start gap-3 rounded-lg border border-base-200 p-4 hover:border-primary/40">
+              <input type="checkbox" class="checkbox checkbox-primary mt-0.5" :checked="pickerSelection.includes(doc.uuid)" @change="togglePickerDocument(doc.uuid, $event.target.checked)">
+              <div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><span class="font-semibold">{{ doc.name }}</span><span :class="['badge badge-sm', doc.type === 'REQUEST' ? 'badge-warning' : 'badge-info']">{{ doc.type }}</span><span v-if="!doc.company_id" class="badge badge-sm badge-neutral">Global</span></div><p v-if="doc.description" class="mt-1 text-xs text-base-content/60">{{ doc.description }}</p></div>
+            </label>
+            <p v-if="!filteredCatalog.length" class="py-8 text-center text-sm text-base-content/50">No documents match your search.</p>
+          </div>
+        </div>
+        <div class="modal-action border-t border-base-200 p-5 pt-4"><button class="btn" type="button" @click="closeDocumentPicker">Cancel</button><button class="btn btn-primary" type="button" @click="applyDocumentSelection">Add {{ pickerSelection.length }} document{{ pickerSelection.length === 1 ? '' : 's' }}</button></div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button type="button" @click="closeDocumentPicker">close</button></form>
+    </dialog>
+
+    <div v-if="!embedded" class="flex justify-end border-t border-base-200 pt-4">
       <button
         class="btn btn-primary w-full sm:w-auto"
         type="button"
@@ -124,6 +133,7 @@
 <script setup>
 const props = defineProps({
   tenderUuid: { type: String, required: true },
+  embedded: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['saved', 'back']);
@@ -131,13 +141,15 @@ const emit = defineEmits(['saved', 'back']);
 const toast = useToast();
 const catalogStore = useTenderdocumentStore();
 const { getTenderDocumentRequirements, syncTenderDocumentRequirements } = useTenderHelper();
-const { uploadFile } = useDocmanUpload();
+const { presignAndUpload } = useS3Upload();
 
 const loading = ref(true);
 const saving = ref(false);
 const errorMessage = ref('');
 const search = ref('');
 const uploadingUuid = ref('');
+const documentPickerDialog = ref(null);
+const pickerSelection = ref([]);
 /** @type {Record<string, { selected: boolean, file_disk?: string|null, file_path?: string|null, original_filename?: string|null, mime_type?: string|null, file_size?: number|null }>} */
 const selection = reactive({});
 
@@ -153,6 +165,36 @@ const filteredCatalog = computed(() => {
       d.name?.toLowerCase().includes(q) || d.description?.toLowerCase().includes(q),
   );
 });
+
+const selectedCatalog = computed(() =>
+  catalog.value.filter((doc) => selection[doc.uuid]?.selected),
+);
+
+function openDocumentPicker() {
+  search.value = '';
+  pickerSelection.value = Object.entries(selection)
+    .filter(([, value]) => value.selected)
+    .map(([uuid]) => uuid);
+  documentPickerDialog.value?.showModal?.();
+}
+
+function closeDocumentPicker() {
+  documentPickerDialog.value?.close?.();
+}
+
+function togglePickerDocument(uuid, checked) {
+  pickerSelection.value = checked
+    ? [...new Set([...pickerSelection.value, uuid])]
+    : pickerSelection.value.filter((item) => item !== uuid);
+}
+
+function applyDocumentSelection() {
+  const selected = new Set(pickerSelection.value);
+  for (const doc of catalog.value) {
+    toggleDoc(doc.uuid, selected.has(doc.uuid));
+  }
+  closeDocumentPicker();
+}
 
 function initSelectionFromSaved(rows) {
   for (const key of Object.keys(selection)) {
@@ -195,7 +237,7 @@ async function onFile(uuid, e) {
   const file = e.target.files?.[0];
   if (!file) return;
   uploadingUuid.value = uuid;
-  const { ok, data, error } = await uploadFile(file, 'tender-documents');
+  const { ok, key, error } = await presignAndUpload(file, 'tender-documents');
   uploadingUuid.value = '';
   if (!ok) {
     toast.error({ title: 'Upload failed', message: error || 'Try again.', position: 'topRight', layout: 2 });
@@ -203,11 +245,31 @@ async function onFile(uuid, e) {
   }
   if (!selection[uuid]) selection[uuid] = { selected: true };
   selection[uuid].selected = true;
-  selection[uuid].file_disk = 'docman';
-  selection[uuid].file_path = data.file_key;
-  selection[uuid].original_filename = data.file_name;
-  selection[uuid].mime_type = data.mime_type;
-  selection[uuid].file_size = data.file_size;
+  selection[uuid].file_disk = 's3';
+  selection[uuid].file_path = key;
+  selection[uuid].original_filename = file.name;
+  selection[uuid].mime_type = file.type || 'application/octet-stream';
+  selection[uuid].file_size = file.size;
+
+  const { status, error: saveError } = await syncTenderDocumentRequirements(props.tenderUuid, {
+    documents: buildPayload(),
+  });
+  if (!status?.value) {
+    toast.error({
+      title: 'Attachment not linked',
+      message: saveError?.value?.data?.message || 'The file was uploaded but could not be linked to this tender. Try saving again.',
+      position: 'topRight',
+      layout: 2,
+    });
+    return;
+  }
+
+  toast.success({
+    title: 'Attachment saved',
+    message: `${file.name} is now linked to this tender.`,
+    position: 'topRight',
+    layout: 2,
+  });
 }
 
 function buildPayload() {
@@ -233,7 +295,7 @@ async function saveAndContinue() {
   if (!status?.value) {
     errorMessage.value =
       error?.value?.data?.message || data?.value?.message || 'Failed to save document requirements.';
-    return;
+    return false;
   }
   toast.success({
     title: 'Saved',
@@ -241,7 +303,8 @@ async function saveAndContinue() {
     position: 'topRight',
     layout: 2,
   });
-  emit('saved');
+  if (!props.embedded) emit('saved');
+  return true;
 }
 
 async function load() {
@@ -261,4 +324,6 @@ async function load() {
 }
 
 onMounted(() => load());
+
+defineExpose({ save: saveAndContinue });
 </script>

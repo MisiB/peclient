@@ -1,13 +1,13 @@
 <template>
   <header class="navbar sticky top-0 z-40 border-b border-base-200/70 bg-base-100/90 px-4 py-2 shadow-sm backdrop-blur-md">
     <div class="flex flex-1 items-center gap-2">
-      <!-- Sidebar toggle — visible on mobile only -->
+      <!-- Sidebar toggle -->
       <button
-        class="btn btn-ghost btn-sm lg:hidden"
+        class="btn btn-outline btn-circle btn-sm shadow-sm"
         aria-label="Toggle sidebar"
         @click="$emit('toggleSidebar')"
       >
-        <Icon name="lucide:menu" class="h-5 w-5" />
+        <Icon name="lucide:layout-grid" class="h-5 w-5" />
       </button>
 
       <div class="flex flex-col gap-0">
@@ -32,7 +32,7 @@
 
         <ul tabindex="0" class="menu dropdown-content z-[60] mt-2 w-56 rounded-box border border-base-200 bg-base-100 p-2 shadow-xl">
           <li>
-            <NuxtLink to="/" class="gap-2 rounded-lg">
+            <NuxtLink to="/profile" class="gap-2 rounded-lg">
               <Icon name="lucide:user" />
               Profile
             </NuxtLink>

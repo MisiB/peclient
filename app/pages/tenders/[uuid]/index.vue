@@ -22,7 +22,7 @@
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <NuxtLink
-              v-if="tender?.status === 'DRAFT' && canEdit"
+              v-if="['DRAFT', 'METHOD_DETERMINED'].includes(tender?.status) && canEdit"
               :to="`/tenders/${uuid}/edit`"
               class="btn btn-ghost btn-sm"
             >
@@ -62,12 +62,21 @@
         </div>
       </div>
 
+      <div v-if="cancellation" class="alert border border-warning/30 bg-warning/10">
+        <Icon name="lucide:file-warning" class="h-5 w-5 shrink-0 text-warning" />
+        <div class="min-w-0">
+          <p class="font-semibold">Cancellation {{ prettyStatus(cancellation.status) }}</p>
+          <p class="text-sm">{{ cancellation.public_notice }}</p>
+          <p class="mt-1 text-xs text-base-content/60">Ground: {{ prettyStatus(cancellation.statutory_ground) }}</p>
+        </div>
+      </div>
+
       <!-- Workflow panel -->
       <div class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-4 p-4 sm:p-5">
           <div class="flex items-center gap-2">
             <Icon name="lucide:git-branch" class="h-4 w-4 text-base-content/60" />
-            <h2 class="text-sm font-semibold">Review & publication</h2>
+            <h2 class="text-sm font-semibold">Procurement lifecycle</h2>
           </div>
 
           <!-- Stage tracker -->
@@ -83,9 +92,14 @@
             </li>
           </ul>
 
-          <div v-if="availableActions.length" class="flex flex-wrap gap-2">
+          <div v-if="tender.status === 'PUBLISHED'" class="alert border border-info/25 bg-info/10 py-3 text-sm">
+            <Icon name="lucide:clock" class="h-4 w-4 shrink-0 text-info" />
+            <span>Submissions close automatically {{ tender.closing_at ? `at ${formatDateTime(tender.closing_at)}` : `at the end of ${formatDate(tender.closing_date)}` }}. No user action is required.</span>
+          </div>
+
+          <div v-if="primaryActions.length" class="flex flex-wrap gap-2">
             <button
-              v-for="action in availableActions"
+              v-for="action in primaryActions"
               :key="action"
               type="button"
               class="btn btn-sm"
@@ -98,13 +112,50 @@
             </button>
           </div>
           <p v-else class="text-sm text-base-content/50">
-            No workflow actions are available to you at this stage.
+            No lifecycle actions are available to you at this stage.
           </p>
         </div>
       </div>
 
+      <div role="tablist" aria-label="Tender details" class="tabs tabs-box overflow-x-auto bg-base-200/60 p-1">
+        <button
+          v-for="tab in detailTabs"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          class="tab gap-2 whitespace-nowrap"
+          :class="activeTab === tab.key ? 'tab-active' : ''"
+          :aria-selected="activeTab === tab.key"
+          @click="activeTab = tab.key"
+        >
+          <Icon :name="tab.icon" class="h-4 w-4" />
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <TendersLcsCommitteePanel
+        v-if="activeTab === 'evaluation-committee' && isLcs"
+        :tender="tender"
+        @updated="refresh"
+      />
+
+      <TendersCommitteePanel
+        v-else-if="activeTab === 'evaluation-committee' && !isRfq"
+        :tender="tender"
+      />
+
+      <TendersRfqCommitteePanel
+        v-else-if="activeTab === 'evaluation-committee' && isRfq"
+        :tender="tender"
+      />
+
+      <TendersClarificationsPanel
+        v-if="activeTab === 'clarifications'"
+        :tender-uuid="uuid"
+      />
+
       <!-- Overview -->
-      <div class="card border border-base-200 bg-base-100 shadow-sm">
+      <div v-if="activeTab === 'overview'" class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-4 p-4 sm:p-5">
           <h2 class="text-sm font-semibold">Overview</h2>
           <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -116,8 +167,47 @@
         </div>
       </div>
 
+      <!-- Invited suppliers for invitation-only procurement methods -->
+      <div v-if="activeTab === 'overview' && invitationMode" class="card border border-warning/30 bg-base-100 shadow-sm">
+        <div class="card-body gap-4 p-4 sm:p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning">
+                <Icon name="lucide:users-round" class="h-5 w-5" />
+              </div>
+              <div>
+                <h2 class="text-sm font-semibold">{{ invitationMode === 'DIRECT' ? 'Direct procurement supplier' : 'Invited suppliers' }}</h2>
+                <p class="mt-1 text-xs text-base-content/60">
+                  {{ invitationMode === 'DIRECT' ? 'Only this supplier may participate in the tender.' : 'Only the suppliers listed below may participate in this restricted tender.' }}
+                </p>
+              </div>
+            </div>
+            <span class="badge badge-warning badge-outline">{{ invitedSuppliers.length }} {{ invitedSuppliers.length === 1 ? 'supplier' : 'suppliers' }}</span>
+          </div>
+
+          <div v-if="invitedSuppliers.length" class="overflow-x-auto rounded-xl border border-base-200">
+            <table class="table table-sm">
+              <thead>
+                <tr><th>Supplier</th><th>Registration number</th><th>Email</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="supplier in invitedSuppliers" :key="supplier.id">
+                  <td class="font-medium">{{ supplier.name }}</td>
+                  <td class="font-mono text-xs">{{ supplier.regnumber || '—' }}</td>
+                  <td>{{ supplier.email || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="alert alert-warning py-3 text-sm">
+            <Icon name="lucide:triangle-alert" class="h-4 w-4" />
+            <span>No supplier has been selected. Add the required supplier before submitting or publishing this tender.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Description -->
-      <div v-if="tender.description" class="card border border-base-200 bg-base-100 shadow-sm">
+      <div v-if="activeTab === 'overview' && tender.description" class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-2 p-4 sm:p-5">
           <h2 class="text-sm font-semibold">Description</h2>
           <p class="whitespace-pre-line text-sm text-base-content/80">{{ tender.description }}</p>
@@ -125,7 +215,7 @@
       </div>
 
       <!-- Full tender content (read-only, for reviewers/approvers) -->
-      <div class="card border border-base-200 bg-base-100 shadow-sm">
+      <div v-if="activeTab === 'overview'" class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-3 p-4 sm:p-5">
           <div class="flex items-center gap-2">
             <Icon name="lucide:file-text" class="h-4 w-4 text-base-content/60" />
@@ -149,14 +239,26 @@
                   <div class="min-w-0">
                     <p class="text-sm font-semibold">{{ item.description }}</p>
                     <div class="mt-1 flex flex-wrap gap-4 text-xs text-base-content/70">
-                      <span>Qty: <strong class="font-mono">{{ item.quantity }}</strong></span>
-                      <span>Unit: <strong class="font-mono">{{ formatMoney(item.unit_price) }}</strong></span>
-                      <span>Total: <strong class="font-mono">{{ formatMoney(item.total) }}</strong></span>
+                      <template v-if="!isAppTenderItem(item)">
+                        <span>Qty: <strong class="font-mono">{{ item.quantity }}</strong></span>
+                        <span>Unit: <strong class="font-mono">{{ formatMoney(item.unit_price) }}</strong></span>
+                      </template>
+                      <span>{{ isAppTenderItem(item) ? 'Budget consumed' : 'Total' }}: <strong class="font-mono">{{ formatMoney(item.total) }}</strong></span>
                     </div>
                   </div>
                   <span class="badge badge-ghost badge-sm">
-                    {{ item.annualprocurementplanitem_id ? 'APP line' : 'Manual line' }}
+                    {{ tenderItemSourceLabel(item) }}
                   </span>
+                </div>
+
+                <div v-if="isAppTenderItem(item)" class="mt-2 flex flex-wrap items-center gap-1 text-xs">
+                  <span class="text-base-content/60">Required supplier categories:</span>
+                  <span v-if="!item.supplier_categories?.length" class="text-base-content/50">Open to all</span>
+                  <template v-else>
+                    <span v-for="category in item.supplier_categories" :key="category.id" class="badge badge-outline badge-sm">
+                      {{ category.code }} · {{ category.name }}
+                    </span>
+                  </template>
                 </div>
 
                 <div v-if="item.products?.length" class="mt-3 space-y-2">
@@ -180,29 +282,6 @@
                   </div>
                 </div>
                 <p v-else class="mt-2 text-xs text-base-content/40">No products defined.</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Eligible supplier categories -->
-          <div class="collapse collapse-arrow border border-base-200 bg-base-100">
-            <input type="checkbox" />
-            <div class="collapse-title text-sm font-medium">
-              Eligible supplier categories ({{ supplierCategories.length }})
-            </div>
-            <div class="collapse-content">
-              <p v-if="supplierCategories.length === 0" class="py-2 text-sm text-base-content/50">
-                No supplier categories set — any registered supplier may bid.
-              </p>
-              <div v-else class="flex flex-wrap gap-2">
-                <span
-                  v-for="c in supplierCategories"
-                  :key="c.id"
-                  class="badge badge-outline gap-1"
-                >
-                  <span class="font-mono text-xs opacity-60">{{ c.code }}</span>
-                  {{ c.name }}
-                </span>
               </div>
             </div>
           </div>
@@ -248,12 +327,12 @@
               <p v-if="!detailsLoading && eligibilityQuestions.length === 0" class="py-2 text-sm text-base-content/50">
                 No commercial eligibility questions.
               </p>
-              <ol class="list-decimal space-y-2 pl-5">
-                <li v-for="(q, i) in eligibilityQuestions" :key="i" class="text-sm">
-                  {{ q.question }}
-                  <span class="ml-1 badge badge-ghost badge-xs">{{ prettyType(q.response_type) }}</span>
-                </li>
-              </ol>
+              <div v-if="eligibilityQuestionGroups.length" class="space-y-3">
+                <section v-for="group in eligibilityQuestionGroups" :key="group.key" class="overflow-hidden rounded-xl border border-base-200">
+                  <div class="flex items-center justify-between gap-3 border-b border-base-200 bg-base-200/50 px-4 py-3"><h4 class="font-semibold">{{ group.title }}</h4><span class="badge badge-ghost badge-sm">{{ group.questions.length }} question{{ group.questions.length === 1 ? '' : 's' }}</span></div>
+                  <ol class="list-decimal space-y-2 p-4 pl-9"><li v-for="q in group.questions" :key="q.id" class="text-sm"><span>{{ q.question }}</span><span class="ml-2 badge badge-ghost badge-xs">{{ prettyType(q.response_type) }}</span></li></ol>
+                </section>
+              </div>
             </div>
           </div>
 
@@ -264,15 +343,22 @@
               Technical eligibility ({{ technicalQuestions.length }})
             </div>
             <div class="collapse-content">
-              <p v-if="!detailsLoading && technicalQuestions.length === 0" class="py-2 text-sm text-base-content/50">
+              <p v-if="!detailsLoading && technicalQuestions.length === 0 && technicalProducts.length === 0" class="py-2 text-sm text-base-content/50">
                 No technical eligibility questions.
               </p>
-              <ol class="list-decimal space-y-2 pl-5">
-                <li v-for="(q, i) in technicalQuestions" :key="i" class="text-sm">
-                  {{ q.question }}
-                  <span class="ml-1 badge badge-ghost badge-xs">{{ prettyType(q.response_type) }}</span>
-                </li>
-              </ol>
+              <div v-if="technicalLegacyGroups.length" class="mb-3 space-y-3">
+                <section v-for="group in technicalLegacyGroups" :key="group.key" class="overflow-hidden rounded-xl border border-base-200"><div class="border-b border-base-200 bg-base-200/50 px-4 py-3 font-semibold">{{ group.title }}</div><ol class="list-decimal space-y-2 p-4 pl-9"><li v-for="q in group.questions" :key="q.id" class="text-sm">{{ q.question }}<span class="ml-2 badge badge-ghost badge-xs">{{ prettyType(q.response_type) }}</span></li></ol></section>
+              </div>
+              <div v-if="technicalProducts.length" class="space-y-4">
+                <article v-for="product in technicalProducts" :key="product.id" class="overflow-hidden rounded-xl border border-primary/25">
+                  <div class="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary/5 px-4 py-3"><span v-if="technicalIsMultipleLot" class="badge badge-primary badge-sm">Lot {{ product.lot_number }}</span><div><h4 class="font-bold">{{ product.description }}</h4><p class="text-xs text-base-content/55">{{ product.lot_description }}</p></div></div>
+                  <div class="space-y-3 p-4">
+                    <section class="overflow-hidden rounded-lg border border-primary/20"><div class="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-3 py-2"><Icon name="lucide:settings-2" class="h-4 w-4 text-primary" /><h5 class="text-sm font-semibold">1. Product specifications</h5></div><div v-if="product.specifications?.length" class="overflow-x-auto"><table class="table table-sm"><thead><tr><th>Specification</th><th>Requirement</th><th>Acceptance</th></tr></thead><tbody><tr v-for="specification in product.specifications" :key="specification.id"><td class="font-medium">{{ specification.label }}</td><td>{{ specification.value || '—' }}</td><td><span class="badge badge-ghost badge-sm">{{ ({ MANDATORY: 'Mandatory — exact match', EQUIVALENT_ALLOWED: 'Equivalent allowed', PREFERRED: 'Preferred' })[specification.acceptance_policy] || 'Equivalent allowed' }}</span></td></tr></tbody></table></div><p v-else class="p-4 text-sm text-base-content/50">No product specifications.</p></section>
+                    <section v-for="(group, groupIndex) in technicalGroupsForProduct(product)" :key="group.key" class="overflow-hidden rounded-lg border border-base-200"><div class="flex items-center justify-between border-b border-base-200 bg-base-200/50 px-3 py-2"><h5 class="text-sm font-semibold">{{ groupIndex + 2 }}. {{ group.title }}</h5><span class="badge badge-ghost badge-xs">{{ group.questions.length }}</span></div><ol class="list-decimal space-y-2 p-3 pl-8"><li v-for="q in group.questions" :key="q.id" class="text-sm">{{ q.question }}<span class="ml-2 badge badge-ghost badge-xs">{{ prettyType(q.response_type) }}</span></li></ol></section>
+                    <p v-if="!technicalGroupsForProduct(product).length" class="rounded-lg border border-dashed border-base-300 p-4 text-center text-sm text-base-content/50">No additional eligibility groups.</p>
+                  </div>
+                </article>
+              </div>
             </div>
           </div>
 
@@ -294,10 +380,19 @@
       </div>
 
       <!-- Addenda (only once the tender is live) -->
-      <TendersAddendaPanel v-if="tender.status === 'PUBLISHED'" :tender-uuid="uuid" />
+      <template v-if="activeTab === 'addenda'">
+        <TendersAddendaPanel v-if="addendaAvailable" :tender-uuid="uuid" />
+        <div v-else class="card border border-dashed border-base-300 bg-base-100">
+          <div class="card-body items-center py-12 text-center">
+            <Icon name="lucide:file-plus-2" class="h-10 w-10 text-base-content/25" />
+            <h2 class="font-semibold">Addenda are not available yet</h2>
+            <p class="max-w-lg text-sm text-base-content/55">Addenda and amendments become available after the tender has been published.</p>
+          </div>
+        </div>
+      </template>
 
       <!-- History timeline -->
-      <div class="card border border-base-200 bg-base-100 shadow-sm">
+      <div v-if="activeTab === 'history'" class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-3 p-4 sm:p-5">
           <div class="flex items-center gap-2">
             <Icon name="lucide:history" class="h-4 w-4 text-base-content/60" />
@@ -329,6 +424,34 @@
           </ul>
         </div>
       </div>
+
+      <!-- Destructive procurement actions stay at the bottom of the page. -->
+      <div v-if="destructiveActions.length" class="card border border-error/30 bg-base-100 shadow-sm">
+        <div class="card-body gap-3 p-4 sm:p-5">
+          <div class="flex items-start gap-3">
+            <Icon name="lucide:triangle-alert" class="mt-0.5 h-5 w-5 shrink-0 text-error" />
+            <div>
+              <h2 class="text-sm font-semibold">Procurement controls</h2>
+              <p class="mt-1 text-sm text-base-content/60">
+                These actions interrupt or end the procurement process and require a reason.
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="action in destructiveActions"
+              :key="action"
+              type="button"
+              class="btn btn-outline btn-error btn-sm"
+              :disabled="submitting"
+              @click="openActionDialog(action)"
+            >
+              <Icon :name="actionMeta[action]?.icon ?? 'lucide:triangle-alert'" class="h-4 w-4" />
+              {{ actionMeta[action]?.label ?? action }}
+            </button>
+          </div>
+        </div>
+      </div>
     </template>
 
     <!-- Action dialog -->
@@ -336,7 +459,36 @@
       <div class="modal-box">
         <h3 class="text-lg font-bold">{{ actionMeta[pendingAction]?.label ?? 'Confirm' }}</h3>
         <p class="py-2 text-sm text-base-content/70">{{ actionMeta[pendingAction]?.prompt }}</p>
-        <label class="form-control w-full">
+        <div v-if="pendingAction === 'request_cancellation'" class="space-y-3">
+          <label class="form-control w-full">
+            <span class="label-text text-xs font-medium">Statutory ground <span class="text-error">*</span></span>
+            <select v-model="cancellationForm.statutory_ground" class="select select-bordered w-full">
+              <option disabled value="">Select the section 42 ground</option>
+              <option v-for="ground in cancellationGrounds" :key="ground.value" :value="ground.value">{{ ground.label }}</option>
+            </select>
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text text-xs font-medium">Detailed reason <span class="text-error">*</span></span>
+            <textarea v-model="cancellationForm.reason" rows="4" class="textarea textarea-bordered w-full" placeholder="Record the facts and supporting rationale…" />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text text-xs font-medium">Public cancellation notice <span class="text-error">*</span></span>
+            <textarea v-model="cancellationForm.public_notice" rows="3" class="textarea textarea-bordered w-full" placeholder="Message that affected bidders will receive…" />
+          </label>
+          <label class="form-control w-full">
+            <span class="label-text text-xs font-medium">Next step</span>
+            <select v-model="cancellationForm.reprocurement_intent" class="select select-bordered w-full">
+              <option value="UNDECIDED">Not yet decided</option>
+              <option value="RETENDER">Re-tender the requirement</option>
+              <option value="ABANDON">Abandon the requirement</option>
+            </select>
+          </label>
+          <label v-if="cancellationForm.statutory_ground === 'INSUFFICIENT_OR_NO_RESPONSIVE_BIDS'" class="form-control w-full">
+            <span class="label-text text-xs font-medium">Unsuccessful-procurement investigation <span class="text-error">*</span></span>
+            <textarea v-model="cancellationForm.investigation_summary" rows="4" class="textarea textarea-bordered w-full" placeholder="Summarise the Regulation 24 investigation and corrective action…" />
+          </label>
+        </div>
+        <label v-else class="form-control w-full">
           <span class="label-text text-xs font-medium">
             Comment
             <span v-if="actionMeta[pendingAction]?.commentRequired" class="text-error">*</span>
@@ -355,7 +507,7 @@
             type="button"
             class="btn"
             :class="actionMeta[pendingAction]?.btnClass ?? 'btn-primary'"
-            :disabled="submitting || (actionMeta[pendingAction]?.commentRequired && !actionComment.trim())"
+            :disabled="submitting || actionConfirmationDisabled"
             @click="confirmAction"
           >
             <span v-if="submitting" class="loading loading-spinner loading-sm" />
@@ -378,6 +530,9 @@ const {
   getTenderWorkflowActions,
   getTenderTransitions,
   transitionTender,
+  requestTenderCancellation,
+  approveTenderCancellation,
+  rejectTenderCancellation,
   getTenderItems,
   getTenderDocumentRequirements,
   getTenderEligibilityQuestions,
@@ -393,17 +548,67 @@ const uuid = String(route.params.uuid)
 const loading = ref(true)
 const loadError = ref('')
 const tender = ref(null)
+const isRfq = computed(() => {
+  const method = tender.value?.procurementmethod
+  const identity = `${method?.code || ''} ${method?.name || ''}`.toUpperCase()
+  return identity.includes('RFQ') || identity.includes('REQUEST FOR QUOT')
+})
+const isLcs = computed(() => !isRfq.value && ['LCS', 'LEAST_COST_SELECTION'].includes(String(tender.value?.bidevaluationmethod?.code || tender.value?.evaluationcriterion?.code || '').toUpperCase()))
 const availableActions = ref([])
+const cancellation = ref(null)
+const destructiveActionNames = ['suspend', 'request_cancellation', 'approve_cancellation']
+const primaryActions = computed(() => availableActions.value.filter(action => !destructiveActionNames.includes(action)))
+const destructiveActions = computed(() => availableActions.value.filter(action => destructiveActionNames.includes(action)))
 const transitions = ref([])
+const activeTab = ref(['overview', 'clarifications', 'addenda', 'history', 'evaluation-committee'].includes(String(route.query.tab)) ? String(route.query.tab) : 'overview')
+
+const detailTabs = computed(() => [
+  { key: 'overview', label: 'Overview', icon: 'lucide:layout-dashboard' },
+  { key: 'clarifications', label: 'Clarifications', icon: 'lucide:messages-square' },
+  { key: 'addenda', label: 'Addenda & amendments', icon: 'lucide:file-pen-line' },
+  { key: 'history', label: 'History', icon: 'lucide:history' },
+  { key: 'evaluation-committee', label: 'Evaluation Committee', icon: 'lucide:users' },
+])
 
 const detailsLoading = ref(false)
 const items = ref([])
 const documentRequirements = ref([])
 const eligibilityQuestions = ref([])
 const technicalQuestions = ref([])
+const technicalProducts = ref([])
+const technicalIsMultipleLot = ref(false)
 const sbdDetails = ref(null)
 const sbdDownloading = ref(false)
 const sbdError = ref('')
+
+function isAppTenderItem(item) {
+  return Boolean(item?.annualprocurementplanitem_id || item?.annualprocurementplan_consolidation_id)
+}
+
+function tenderItemSourceLabel(item) {
+  if (item?.annualprocurementplan_consolidation_id) return 'APP consolidated line'
+  if (item?.annualprocurementplanitem_id) return 'APP line'
+  return 'Manual line'
+}
+
+function groupQuestions(rows, fallbackTitle) {
+  const groups = new Map()
+  for (const question of rows ?? []) {
+    const title = question.group_title || fallbackTitle
+    const order = Number(question.group_sort_order ?? 0)
+    const key = `${order}:${title}`
+    if (!groups.has(key)) groups.set(key, { key, title, order, questions: [] })
+    groups.get(key).questions.push(question)
+  }
+  return [...groups.values()].sort((left, right) => left.order - right.order)
+}
+
+const eligibilityQuestionGroups = computed(() => groupQuestions(eligibilityQuestions.value, 'General eligibility'))
+const technicalLegacyGroups = computed(() => groupQuestions(
+  technicalQuestions.value.filter(question => !question.procurementrequestitem_product_id),
+  'General technical eligibility',
+))
+const technicalGroupsForProduct = product => groupQuestions(product.questions ?? [], 'General technical eligibility')
 
 const submitting = ref(false)
 const actionMessage = ref('')
@@ -413,8 +618,40 @@ const actionErrors = ref([])
 const actionDialog = ref(null)
 const pendingAction = ref('')
 const actionComment = ref('')
+const cancellationForm = reactive({
+  statutory_ground: '',
+  reason: '',
+  public_notice: '',
+  reprocurement_intent: 'UNDECIDED',
+  investigation_summary: '',
+})
+const cancellationGrounds = [
+  { value: 'NEED_CEASED_OR_CHANGED', label: 'Need ceased or changed significantly' },
+  { value: 'INSUFFICIENT_FUNDING', label: 'Insufficient funding' },
+  { value: 'MATERIAL_REQUIREMENT_CHANGE', label: 'Material requirement or bidding-condition change' },
+  { value: 'INSUFFICIENT_OR_NO_RESPONSIVE_BIDS', label: 'Insufficient or no responsive bids' },
+  { value: 'COLLUSION', label: 'Evidence of bidder collusion' },
+  { value: 'PUBLIC_INTEREST', label: 'Otherwise in the public interest' },
+]
+const actionConfirmationDisabled = computed(() => {
+  if (pendingAction.value === 'request_cancellation') {
+    return !cancellationForm.statutory_ground
+      || cancellationForm.reason.trim().length < 20
+      || cancellationForm.public_notice.trim().length < 20
+      || (cancellationForm.statutory_ground === 'INSUFFICIENT_OR_NO_RESPONSIVE_BIDS'
+        && cancellationForm.investigation_summary.trim().length < 20)
+  }
+  return Boolean(actionMeta[pendingAction.value]?.commentRequired && !actionComment.value.trim())
+})
 
 const actionMeta = {
+  submit_for_approval: {
+    label: 'Submit for approval',
+    icon: 'lucide:send',
+    btnClass: 'btn-primary',
+    commentRequired: false,
+    prompt: 'Submit this tender directly for approval. It will no longer be editable unless it is sent back.',
+  },
   submit_for_review: {
     label: 'Submit for review',
     icon: 'lucide:send',
@@ -457,17 +694,125 @@ const actionMeta = {
     commentRequired: false,
     prompt: 'Publish the tender. It will become live for the publication window you configured.',
   },
+  open_bids: {
+    label: 'Record bid opening',
+    icon: 'lucide:folder-open',
+    btnClass: 'btn-primary',
+    commentRequired: true,
+    prompt: 'Record the public bid opening and its minutes before evaluation begins.',
+  },
+  start_evaluation: {
+    label: 'Start evaluation',
+    icon: 'lucide:clipboard-list',
+    btnClass: 'btn-primary',
+    commentRequired: false,
+    prompt: 'Start the confidential method-specific evaluation with the appointed committee.',
+  },
+  complete_evaluation: {
+    label: 'Complete evaluation',
+    icon: 'lucide:clipboard-check',
+    btnClass: 'btn-success',
+    commentRequired: true,
+    prompt: 'Submit the committee evaluation report to the PMU for validation.',
+  },
+  issue_intention: {
+    label: 'Issue intention to award',
+    icon: 'lucide:award',
+    btnClass: 'btn-warning',
+    commentRequired: false,
+    prompt: 'Issue the proposed award notice. This does not yet create the final contract award.',
+  },
+  begin_standstill: {
+    label: 'Begin standstill',
+    icon: 'lucide:calendar-clock',
+    btnClass: 'btn-warning',
+    commentRequired: false,
+    prompt: 'Begin the statutory standstill period for challenges and debrief requests.',
+  },
+  finalize_award: {
+    label: 'Confirm award',
+    icon: 'lucide:badge-check',
+    btnClass: 'btn-success',
+    commentRequired: false,
+    prompt: 'Confirm the award after the standstill period and any challenge suspensions have ended.',
+  },
+  sign_contract: {
+    label: 'Record contract signature',
+    icon: 'lucide:file-signature',
+    btnClass: 'btn-success',
+    commentRequired: true,
+    prompt: 'Record that the authorised contract has been signed.',
+  },
+  suspend: {
+    label: 'Suspend process',
+    icon: 'lucide:pause-circle',
+    btnClass: 'btn-error',
+    commentRequired: true,
+    prompt: 'Suspend the procurement. A legal or operational reason is required.',
+  },
+  resume: {
+    label: 'Resume procurement',
+    icon: 'lucide:play-circle',
+    btnClass: 'btn-success',
+    commentRequired: true,
+    prompt: 'Resume the procurement at the stage held before suspension. Confirm that the suspension ground has been resolved.',
+  },
+  request_cancellation: {
+    label: 'Request cancellation',
+    icon: 'lucide:x-circle',
+    btnClass: 'btn-error',
+    commentRequired: false,
+    prompt: 'Submit a legally grounded cancellation request for approval. The tender will be held while the request is reviewed.',
+  },
+  approve_cancellation: {
+    label: 'Approve cancellation',
+    icon: 'lucide:badge-x',
+    btnClass: 'btn-error',
+    commentRequired: false,
+    prompt: 'Approve this cancellation, notify affected bidders, release bid securities, and create settlement elections for paid fees.',
+  },
+  reject_cancellation: {
+    label: 'Reject cancellation',
+    icon: 'lucide:undo-2',
+    btnClass: 'btn-warning',
+    commentRequired: true,
+    prompt: 'Reject the cancellation request and restore the tender to its previous stage. A reason is required.',
+  },
 }
 
-const STATUS_ORDER = ['DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL', 'APPROVED', 'PUBLISHED']
+const STATUS_ORDER = [
+  'DRAFT',
+  'METHOD_DETERMINED',
+  'PENDING_REVIEW',
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'PUBLISHED',
+  'SUBMISSIONS_CLOSED',
+  'OPENED',
+  'UNDER_EVALUATION',
+  'EVALUATED',
+  'INTENTION_TO_AWARD',
+  'STANDSTILL',
+  'AWARDED',
+  'CONTRACTED',
+]
 
 const stageTrack = computed(() => {
   const labels = {
     DRAFT: 'Draft',
+    METHOD_DETERMINED: 'Method',
     PENDING_REVIEW: 'Review',
     PENDING_APPROVAL: 'Approval',
     APPROVED: 'Approved',
     PUBLISHED: 'Published',
+    SUBMISSIONS_CLOSED: 'Closed',
+    OPENED: 'Opened',
+    UNDER_EVALUATION: 'Evaluation',
+    EVALUATED: 'Evaluated',
+    INTENTION_TO_AWARD: 'Intention to award',
+    STANDSTILL: 'Standstill',
+    AWARDED: 'Awarded',
+    CONTRACTED: 'Contracted',
   }
   const currentIndex = STATUS_ORDER.indexOf(tender.value?.status)
   return STATUS_ORDER.map((key, i) => ({
@@ -482,6 +827,7 @@ const overviewFields = computed(() => {
   if (!t) return []
   return [
     { label: 'Procurement method', value: t.procurementmethod?.name ?? '—' },
+    ...(t.rfq_type ? [{ label: 'RFQ type', value: prettyType(t.rfq_type) }] : []),
     { label: 'Procurement group', value: t.procurementgroup?.name ?? '—' },
     { label: 'Evaluation criterion', value: t.evaluationcriterion?.name ?? '—' },
     { label: 'Contract type', value: prettyType(t.contracttype) || '—' },
@@ -508,7 +854,27 @@ const itemsTotal = computed(() =>
   items.value.reduce((sum, it) => sum + Number(it.total ?? 0), 0),
 )
 
-const supplierCategories = computed(() => tender.value?.supplier_categories ?? [])
+const invitationMode = computed(() => {
+  const t = tender.value
+  if (String(t?.consultancy_participation_mode ?? '').toUpperCase() === 'RESTRICTED') return 'RESTRICTED'
+  if (String(t?.consultancy_participation_mode ?? '').toUpperCase() === 'OPEN') return null
+  if (String(t?.rfq_type ?? '').toUpperCase() === 'RESTRICTED') return 'RESTRICTED'
+
+  const method = tender.value?.procurementmethod
+  const identity = `${method?.code ?? ''} ${method?.name ?? ''}`.toUpperCase()
+  if (identity.includes('DIRECT')) return 'DIRECT'
+  if (identity.includes('RESTRICT')) return 'RESTRICTED'
+  if ((t?.invited_suppliers?.length ?? 0) > 0) return 'RESTRICTED'
+  return null
+})
+const invitedSuppliers = computed(() => tender.value?.invited_suppliers ?? [])
+const addendaAvailable = computed(() => ![
+  'DRAFT',
+  'METHOD_DETERMINED',
+  'PENDING_REVIEW',
+  'PENDING_APPROVAL',
+  'APPROVED',
+].includes(tender.value?.status))
 const sbdHasPdf = computed(() => Boolean(sbdDetails.value?.sbd?.has_pdf))
 const canGenerateSbd = computed(() => tender.value?.status === 'DRAFT' && canEdit.value)
 
@@ -571,6 +937,7 @@ async function loadActions() {
   const { data, error } = await getTenderWorkflowActions(uuid)
   if (error.value) return
   availableActions.value = data.value?.data?.actions ?? []
+  cancellation.value = data.value?.data?.cancellation ?? null
 }
 
 async function loadTransitions() {
@@ -592,7 +959,10 @@ async function loadDetails() {
     items.value = it.data.value?.data ?? []
     documentRequirements.value = docs.data.value?.data ?? []
     eligibilityQuestions.value = elig.data.value?.data?.questions ?? []
-    technicalQuestions.value = tech.data.value?.data?.questions ?? []
+    const technicalPayload = tech.data.value?.data ?? {}
+    technicalQuestions.value = technicalPayload.questions ?? []
+    technicalProducts.value = technicalPayload.products ?? []
+    technicalIsMultipleLot.value = Boolean(technicalPayload.is_multiple_lot)
     sbdDetails.value = sbd.data.value?.data ?? null
   } finally {
     detailsLoading.value = false
@@ -644,8 +1014,15 @@ async function refresh() {
 }
 
 function openActionDialog(action) {
+  if (action === 'open_bids') {
+    navigateTo(`/tenders/${uuid}/bid-opening`)
+    return
+  }
   pendingAction.value = action
   actionComment.value = ''
+  Object.assign(cancellationForm, {
+    statutory_ground: '', reason: '', public_notice: '', reprocurement_intent: 'UNDECIDED', investigation_summary: '',
+  })
   actionMessage.value = ''
   actionDialog.value?.showModal?.()
 }
@@ -658,6 +1035,7 @@ function closeActionDialog() {
 
 async function confirmAction() {
   if (!pendingAction.value) return
+  const completedAction = pendingAction.value
   const meta = actionMeta[pendingAction.value]
   const comment = actionComment.value.trim()
   if (meta?.commentRequired && !comment) return
@@ -665,7 +1043,17 @@ async function confirmAction() {
   submitting.value = true
   actionErrors.value = []
   try {
-    const { data, status, error } = await transitionTender(uuid, pendingAction.value, comment || null)
+    let result
+    if (pendingAction.value === 'request_cancellation') {
+      result = await requestTenderCancellation(uuid, { ...cancellationForm })
+    } else if (pendingAction.value === 'approve_cancellation') {
+      result = await approveTenderCancellation(uuid, comment || null)
+    } else if (pendingAction.value === 'reject_cancellation') {
+      result = await rejectTenderCancellation(uuid, comment)
+    } else {
+      result = await transitionTender(uuid, pendingAction.value, comment || null)
+    }
+    const { data, status, error } = result
     if (!status.value) {
       actionOk.value = false
       const body = error.value?.data
@@ -676,6 +1064,14 @@ async function confirmAction() {
     actionOk.value = true
     actionMessage.value = data.value?.message ?? 'Done.'
     closeActionDialog()
+    if (completedAction === 'start_evaluation' && isRfq.value) {
+      await navigateTo(`/evaluations/${uuid}`)
+      return
+    }
+    if (completedAction === 'start_evaluation' && isLcs.value) {
+      await navigateTo(`/evaluations/least-cost-selection/${uuid}`)
+      return
+    }
     await refresh()
   } finally {
     submitting.value = false

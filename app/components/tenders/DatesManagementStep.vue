@@ -7,7 +7,7 @@
           <span class="badge badge-warning badge-sm">Required</span>
         </div>
         <p class="text-sm text-base-content/60">
-          Set prequalification, publication, and opening dates. Closing is derived from your procurement method timeline.
+          Set publication and opening dates. Closing is derived from your procurement method timeline.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -54,46 +54,9 @@
 
       <form class="card border border-base-200 bg-base-100 shadow-sm" @submit.prevent="saveAndContinue">
         <div class="card-body gap-6 p-4 sm:p-6">
-          <!-- Prequalification -->
-          <section class="space-y-3">
-            <h3 class="text-base font-semibold">1. Prequalification</h3>
-            <label class="fieldset">
-              <span class="fieldset-legend">Require prequalification?</span>
-              <select v-model="form.require_prequalification" class="select select-bordered w-full max-w-xs">
-                <option value="N">No</option>
-                <option value="Y">Yes</option>
-              </select>
-            </label>
-            <div v-if="form.require_prequalification === 'Y'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <label class="fieldset">
-                <span class="fieldset-legend">Date &amp; time</span>
-                <input
-                  v-model="form.prequalification_at"
-                  type="datetime-local"
-                  :class="['input input-bordered w-full', errors.prequalification_at ? 'input-error' : '']"
-                />
-                <label v-if="errors.prequalification_at" class="label">
-                  <span class="label-text-alt text-error">{{ errors.prequalification_at }}</span>
-                </label>
-              </label>
-              <label class="fieldset md:col-span-2">
-                <span class="fieldset-legend">Venue</span>
-                <input
-                  v-model="form.prequalification_venue"
-                  type="text"
-                  placeholder="e.g. PRAZ Boardroom, 9th Floor, Harare"
-                  :class="['input input-bordered w-full', errors.prequalification_venue ? 'input-error' : '']"
-                />
-                <label v-if="errors.prequalification_venue" class="label">
-                  <span class="label-text-alt text-error">{{ errors.prequalification_venue }}</span>
-                </label>
-              </label>
-            </div>
-          </section>
-
           <!-- Publication & closing -->
-          <section class="space-y-3 border-t border-base-200 pt-6">
-            <h3 class="text-base font-semibold">2. Tender advertisement period</h3>
+          <section class="space-y-3">
+            <h3 class="text-base font-semibold">1. Tender advertisement period</h3>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label class="fieldset">
                 <span class="fieldset-legend">Publication start date</span>
@@ -111,7 +74,7 @@
                 <span class="fieldset-legend">
                   Closing date
                   <span v-if="timeline?.minimum_advertising_days != null" class="text-xs font-normal opacity-60">
-                    (auto: +{{ timeline.minimum_advertising_days }} days)
+                    (auto: +{{ timeline.minimum_advertising_days }} days<span v-if="calculatingClosing">, calculating…</span>)
                   </span>
                 </span>
                 <input
@@ -146,14 +109,15 @@
 
           <!-- Opening -->
           <section class="space-y-3 border-t border-base-200 pt-6">
-            <h3 class="text-base font-semibold">3. Tender opening</h3>
+            <h3 class="text-base font-semibold">2. Tender opening</h3>
             <label class="fieldset max-w-md">
               <span class="fieldset-legend">Opening date &amp; time</span>
-              <input
-                v-model="form.opening_at"
-                type="datetime-local"
-                :class="['input input-bordered w-full', errors.opening_at ? 'input-error' : '']"
-              />
+                <input
+                  v-model="form.opening_at"
+                  type="datetime-local"
+                  :min="minimumOpeningAt"
+                  :class="['input input-bordered w-full', errors.opening_at ? 'input-error' : '']"
+                />
               <label v-if="errors.opening_at" class="label">
                 <span class="label-text-alt text-error">{{ errors.opening_at }}</span>
               </label>
@@ -169,7 +133,7 @@
             <button
               class="btn btn-primary w-full sm:w-auto"
               type="submit"
-              :disabled="saving || loading"
+              :disabled="saving || loading || calculatingClosing"
             >
               <span v-if="saving" class="loading loading-spinner loading-sm" />
               <template v-else>
@@ -198,15 +162,13 @@ const { getTenderDates, syncTenderDates } = useTenderHelper();
 
 const loading = ref(true);
 const saving = ref(false);
+const calculatingClosing = ref(false);
 const errorMessage = ref('');
 const timeline = ref(null);
 const explanations = ref([]);
 const errors = reactive({});
 
 const form = reactive({
-  require_prequalification: 'N',
-  prequalification_at: '',
-  prequalification_venue: '',
   publication_start_date: '',
   closing_date: '',
   closing_time: '10:00',
@@ -214,6 +176,26 @@ const form = reactive({
 });
 
 const closingIsAuto = computed(() => timeline.value?.minimum_advertising_days != null);
+const minimumOpeningAt = computed(() => {
+  if (!form.closing_date) return '';
+
+  const closing = new Date(`${form.closing_date}T${form.closing_time || '10:00'}:00`);
+  if (Number.isNaN(closing.getTime())) return '';
+
+  closing.setMinutes(closing.getMinutes() + 1);
+  return toDatetimeLocal(closing.toISOString());
+});
+let closingCalculationRequest = 0;
+
+watch(
+  () => [form.closing_date, form.closing_time],
+  () => {
+    if (!form.opening_at || !minimumOpeningAt.value) return;
+    if (form.opening_at < minimumOpeningAt.value) {
+      form.opening_at = minimumOpeningAt.value;
+    }
+  },
+);
 
 function toDatetimeLocal(iso) {
   if (!iso) return '';
@@ -223,17 +205,22 @@ function toDatetimeLocal(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function addDays(dateStr, days) {
-  if (!dateStr || days == null) return '';
-  const d = new Date(`${dateStr}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return '';
-  d.setDate(d.getDate() + Number(days));
-  return d.toISOString().slice(0, 10);
-}
+async function recalculateClosing() {
+  const requestId = ++closingCalculationRequest;
+  if (!form.publication_start_date || timeline.value?.minimum_advertising_days == null) {
+    calculatingClosing.value = false;
+    return;
+  }
 
-function recalculateClosing() {
-  if (!form.publication_start_date || timeline.value?.minimum_advertising_days == null) return;
-  form.closing_date = addDays(form.publication_start_date, timeline.value.minimum_advertising_days);
+  calculatingClosing.value = true;
+  form.closing_date = '';
+  const { data, error } = await getTenderDates(props.tenderUuid, form.publication_start_date);
+  if (requestId !== closingCalculationRequest) return;
+
+  if (!error.value) {
+    form.closing_date = data.value?.data?.suggested_closing_date ?? '';
+  }
+  calculatingClosing.value = false;
 }
 
 function clearErrors() {
@@ -266,17 +253,6 @@ function validateClient() {
     }
   }
 
-  if (form.require_prequalification === 'Y') {
-    if (!form.prequalification_at) {
-      errors.prequalification_at = 'Prequalification date and time is required.';
-      valid = false;
-    }
-    if (!form.prequalification_venue?.trim()) {
-      errors.prequalification_venue = 'Venue is required.';
-      valid = false;
-    }
-  }
-
   if (!valid) {
     errorMessage.value = 'Please correct the highlighted fields.';
   } else {
@@ -288,22 +264,18 @@ function validateClient() {
 
 function buildPayload() {
   return {
-    require_prequalification: form.require_prequalification,
-    prequalification_at:
-      form.require_prequalification === 'Y' && form.prequalification_at
-        ? new Date(form.prequalification_at).toISOString()
-        : null,
-    prequalification_venue:
-      form.require_prequalification === 'Y' ? form.prequalification_venue?.trim() : null,
+    require_prequalification: 'N',
+    prequalification_at: null,
+    prequalification_venue: null,
     publication_start_date: form.publication_start_date,
-    closing_date: form.closing_date,
+    closing_date: closingIsAuto.value ? null : form.closing_date,
     closing_time: form.closing_time || '10:00',
     opening_at: form.opening_at ? new Date(form.opening_at).toISOString() : null,
   };
 }
 
 async function saveAndContinue() {
-  recalculateClosing();
+  await recalculateClosing();
   if (!validateClient()) return;
 
   saving.value = true;
@@ -333,9 +305,6 @@ async function saveAndContinue() {
 
 function applyPayload(payload) {
   const dates = payload?.dates ?? {};
-  form.require_prequalification = dates.require_prequalification ?? 'N';
-  form.prequalification_at = toDatetimeLocal(dates.prequalification_at);
-  form.prequalification_venue = dates.prequalification_venue ?? '';
   form.publication_start_date = dates.publication_start_date ?? '';
   form.closing_date = dates.closing_date ?? payload?.suggested_closing_date ?? '';
   form.closing_time = dates.closing_time ?? '10:00';

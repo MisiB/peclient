@@ -66,13 +66,31 @@
           <input v-model="enable.docs" type="checkbox" class="checkbox checkbox-sm" />
           <span class="text-sm font-medium">Required bid documents</span>
         </label>
-        <div v-if="enable.docs" class="mt-3 space-y-1">
+        <div v-if="enable.docs" class="mt-3 space-y-2">
           <p v-if="catalog.length === 0" class="text-xs text-base-content/50">No documents are available in your catalogue.</p>
-          <label v-for="doc in catalog" :key="doc.uuid" class="flex items-center gap-2 rounded px-1 py-1 hover:bg-base-200/40">
-            <input type="checkbox" class="checkbox checkbox-sm" :value="doc.uuid" v-model="selectedDocUuids" />
-            <span class="text-sm">{{ doc.name }}</span>
-            <span class="badge badge-ghost badge-xs">{{ doc.type }}</span>
-          </label>
+          <div v-for="doc in catalog" :key="doc.uuid" class="rounded border border-base-200 p-2">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" class="checkbox checkbox-sm" :value="doc.uuid" v-model="selectedDocUuids" />
+              <span class="text-sm font-medium">{{ doc.name }}</span>
+              <span class="badge badge-ghost badge-xs">{{ doc.type }}</span>
+            </label>
+            <div v-if="doc.type === 'PROVIDE' && selectedDocUuids.includes(doc.uuid)" class="ml-7 mt-2 space-y-1">
+              <input
+                type="file"
+                class="file-input file-input-bordered file-input-xs w-full max-w-md"
+                :disabled="uploadingDocumentUuid === doc.uuid"
+                @change="(event) => uploadProvidedDocument(doc, event)"
+              />
+              <p v-if="uploadingDocumentUuid === doc.uuid" class="text-xs text-info">
+                <span class="loading loading-spinner loading-xs" /> Uploading attachment…
+              </p>
+              <p v-else-if="documentFiles[doc.uuid]?.original_filename" class="text-xs text-success">
+                <Icon name="lucide:check-circle-2" class="h-3.5 w-3.5" />
+                {{ documentFiles[doc.uuid].original_filename }}
+              </p>
+              <p v-else class="text-xs text-warning">Attach the file suppliers must download.</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -163,6 +181,8 @@ const {
   getSupplierCategories,
 } = useTenderHelper()
 const { getAll: getDocumentCatalog } = useTenderdocumentHelper()
+const { presignAndUpload } = useS3Upload()
+const toast = useToast()
 
 const loading = ref(true)
 const enable = reactive({ eligibility: false, technical: false, docs: false, specs: false, categories: false })
@@ -171,6 +191,8 @@ const eligibility = ref([])
 const technical = ref([])
 const catalog = ref([])
 const selectedDocUuids = ref([])
+const documentFiles = reactive({})
+const uploadingDocumentUuid = ref('')
 const products = ref([])
 const specProducts = ref([])
 const productToAdd = ref('')
@@ -205,6 +227,29 @@ function removeSpecProduct(uuid) {
   specProducts.value = specProducts.value.filter(sp => sp.product_uuid !== uuid)
 }
 
+async function uploadProvidedDocument(doc, event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  uploadingDocumentUuid.value = doc.uuid
+  const result = await presignAndUpload(file, 'tender-documents')
+  uploadingDocumentUuid.value = ''
+
+  if (!result.ok) {
+    toast.error({ title: 'Upload failed', message: result.error || 'Could not upload the document.', position: 'topRight', layout: 2 })
+    return
+  }
+
+  documentFiles[doc.uuid] = {
+    file_disk: 's3',
+    file_path: result.key,
+    original_filename: file.name,
+    mime_type: file.type || 'application/octet-stream',
+    file_size: file.size,
+  }
+  toast.success({ title: 'Document attached', message: `${file.name} will be applied when the addendum is published.`, position: 'topRight', layout: 2 })
+}
+
 async function load() {
   loading.value = true
   const [eligRes, techRes, docsRes, itemsRes, catalogRes, tenderRes, categoriesRes] = await Promise.all([
@@ -222,9 +267,22 @@ async function load() {
 
   const currentElig = (eligRes.data.value?.data?.questions ?? []).map(q => ({ question: q.question, response_type: q.response_type }))
   const currentTech = (techRes.data.value?.data?.questions ?? []).map(q => ({ question: q.question, response_type: q.response_type }))
-  const currentDocUuids = (docsRes.data.value?.data ?? [])
+  const currentDocuments = docsRes.data.value?.data ?? []
+  const currentDocUuids = currentDocuments
     .map(d => (d.tender_document ?? d.tenderDocument)?.uuid)
     .filter(Boolean)
+
+  for (const row of currentDocuments) {
+    const uuid = (row.tender_document ?? row.tenderDocument)?.uuid
+    if (!uuid || !row.file_path) continue
+    documentFiles[uuid] = {
+      file_disk: row.file_disk ?? 's3',
+      file_path: row.file_path,
+      original_filename: row.original_filename ?? null,
+      mime_type: row.mime_type ?? null,
+      file_size: row.file_size ?? null,
+    }
+  }
 
   catalog.value = (catalogRes.data.value?.data ?? []).filter(d => (d.status ?? 'ACTIVE') === 'ACTIVE')
 
@@ -256,6 +314,16 @@ async function load() {
   if (Array.isArray(init.document_requirements)) {
     enable.docs = true
     selectedDocUuids.value = init.document_requirements.map(d => d.tender_document_uuid).filter(Boolean)
+    for (const row of init.document_requirements) {
+      if (!row.tender_document_uuid || !row.file_path) continue
+      documentFiles[row.tender_document_uuid] = {
+        file_disk: row.file_disk ?? 's3',
+        file_path: row.file_path,
+        original_filename: row.original_filename ?? null,
+        mime_type: row.mime_type ?? null,
+        file_size: row.file_size ?? null,
+      }
+    }
   } else {
     selectedDocUuids.value = currentDocUuids
   }
@@ -300,7 +368,10 @@ function buildContentChanges() {
       .map(r => ({ question: r.question.trim(), response_type: r.response_type }))
   }
   if (enable.docs) {
-    changes.document_requirements = selectedDocUuids.value.map(uuid => ({ tender_document_uuid: uuid }))
+    changes.document_requirements = selectedDocUuids.value.map(uuid => ({
+      tender_document_uuid: uuid,
+      ...(documentFiles[uuid] ?? {}),
+    }))
   }
   if (enable.specs) {
     changes.specifications = specProducts.value.map(sp => ({

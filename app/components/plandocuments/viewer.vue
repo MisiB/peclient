@@ -4,7 +4,7 @@
       <Icon name="lucide:eye" />
     </button>
 
-    <dialog :id="dialogId" class="modal">
+    <dialog :id="dialogId" class="modal" @close="isOpen = false">
       <div class="modal-box h-screen max-h-none w-screen max-w-none rounded-none flex flex-col">
         <div class="flex items-center justify-between border-b border-base-200 pb-2">
           <div class="min-w-0">
@@ -16,7 +16,7 @@
           </button>
         </div>
 
-        <div class="mt-3 flex-1">
+        <div v-if="isOpen" class="mt-3 flex-1">
           <iframe
             v-if="url && previewable"
             :src="url"
@@ -55,6 +55,7 @@ const props = defineProps({
 });
 
 const dialogId = computed(() => `pe_doc_view_modal_${props.documentUuid}`);
+const isOpen = ref(false);
 
 const previewable = computed(() => {
   const m = (props.mimeType || '').toLowerCase();
@@ -66,6 +67,12 @@ const previewable = computed(() => {
   return false;
 });
 
-const open = () => document.getElementById(dialogId.value).showModal();
-const close = () => document.getElementById(dialogId.value).close();
+const open = () => {
+  isOpen.value = true;
+  document.getElementById(dialogId.value).showModal();
+};
+const close = () => {
+  isOpen.value = false;
+  document.getElementById(dialogId.value).close();
+};
 </script>

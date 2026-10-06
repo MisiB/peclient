@@ -12,6 +12,7 @@ export const useNotificationStore = defineStore('notifications', () => {
   const notifications = ref([]);
   const unread = ref(0);
   const loading = ref(false);
+  const errorMessage = ref('');
 
   const { list, unreadCount, markRead, markActioned, markAllRead } = useNotificationHelper();
 
@@ -65,17 +66,24 @@ export const useNotificationStore = defineStore('notifications', () => {
 
   const fetchNotifications = async (params = {}) => {
     loading.value = true;
-    const { data } = await list({ per_page: 25, ...params });
-    const raw = data.value;
-    const payload = raw?.data;
-    let items = [];
-    if (Array.isArray(payload)) {
-      items = payload;
-    } else if (Array.isArray(payload?.data)) {
-      items = payload.data;
+    errorMessage.value = '';
+    try {
+      const { data, error } = await list({ per_page: 25, ...params });
+      if (error?.value) {
+        errorMessage.value = error.value?.data?.message
+          ?? error.value?.response?._data?.message
+          ?? 'Could not load notifications.';
+        return;
+      }
+
+      const raw = data.value;
+      const payload = raw?.data;
+      notifications.value = Array.isArray(payload)
+        ? payload
+        : (Array.isArray(payload?.data) ? payload.data : []);
+    } finally {
+      loading.value = false;
     }
-    notifications.value = items;
-    loading.value = false;
   };
 
   const markAsRead = async (id) => {
@@ -114,6 +122,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     notifications,
     unread,
     loading,
+    errorMessage,
     fetchUnreadCount,
     fetchNotifications,
     startUnreadListeners,

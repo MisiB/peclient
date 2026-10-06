@@ -44,10 +44,11 @@ onMounted(async () => {
   if (!canAccess) return;
   await Promise.all([
     store.fetchPlan(planUuid.value),
-    store.fetchGroupedItems(planUuid.value, { page: 1 }),
+    store.fetchPlanItems(planUuid.value, { page: 1 }),
     store.fetchItemTotals(planUuid.value),
     store.fetchItemTotalsByGroup(planUuid.value),
     store.fetchItemTotalsByFlag(planUuid.value),
+    store.fetchItemTotalsByAwardType(planUuid.value),
     store.fetchUnresolved(planUuid.value),
     store.fetchDisposalplans(planUuid.value),
     store.fetchWorkflowActions(planUuid.value),

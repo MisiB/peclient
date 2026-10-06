@@ -1,33 +1,29 @@
 <template>
   <div class="w-full space-y-4">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <div class="flex flex-wrap items-center gap-2">
-          <h2 class="text-lg font-semibold">Standard bidding document</h2>
-          <span class="badge badge-warning badge-sm">Required</span>
+    <div class="overflow-hidden rounded-2xl border border-primary/20 bg-base-100 shadow-sm">
+      <div class="flex flex-col gap-5 bg-gradient-to-br from-primary/10 via-base-100 to-base-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+        <div class="flex items-start gap-4">
+          <div class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-content shadow-sm">
+            <Icon name="lucide:file-pen-line" class="h-6 w-6" />
+          </div>
+          <div>
+            <div class="mb-1 flex flex-wrap items-center gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-primary">Step 7 of 8</span>
+              <span class="badge badge-warning badge-sm">Required</span>
+            </div>
+            <h2 class="text-xl font-bold tracking-tight">Prepare the standard bidding document</h2>
+            <p class="mt-1 max-w-2xl text-sm text-base-content/65">
+              Review tender information carried forward from earlier steps, complete the contract fields, and add any tender-specific sections.
+            </p>
+          </div>
         </div>
-        <p class="text-sm text-base-content/60">
-          Add any custom sections your tender needs, then click
-          <span class="font-medium">Preview document</span> to review the full bidding document.
-        </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex shrink-0 flex-wrap items-center gap-2">
         <button class="btn btn-ghost btn-sm" type="button" @click="emit('back')">
           <Icon name="lucide:arrow-left" class="h-4 w-4" />
           Back
         </button>
         <button
-          class="btn btn-outline btn-primary btn-sm"
-          type="button"
-          :disabled="saving || loading || autofilling"
-          @click="autofillPolicyFields"
-        >
-          <span v-if="autofilling" class="loading loading-spinner loading-xs" />
-          <Icon v-else name="lucide:sparkles" class="h-4 w-4" />
-          {{ autofilling ? 'Generating...' : 'Complete policy fields with AI' }}
-        </button>
-        <button
-          class="btn btn-outline btn-sm"
+          class="btn btn-primary btn-sm"
           type="button"
           :disabled="saving || loading"
           @click="openPreview"
@@ -36,15 +32,7 @@
           <Icon v-else name="lucide:eye" class="h-4 w-4" />
           Preview document
         </button>
-        <button class="btn btn-secondary btn-sm" type="button" :disabled="saving || loading" @click="save">
-          <span v-if="saving && !continuing" class="loading loading-spinner loading-xs" />
-          <Icon v-else name="lucide:save" class="h-4 w-4" />
-          Save
-        </button>
-        <button class="btn btn-primary btn-sm" type="button" :disabled="saving || loading" @click="saveAndContinue">
-          <span v-if="saving && continuing" class="loading loading-spinner loading-xs" />
-          <span v-else>Save &amp; continue</span>
-        </button>
+        </div>
       </div>
     </div>
 
@@ -61,13 +49,38 @@
     </div>
 
     <template v-else>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div class="rounded-xl border border-base-200 bg-base-100 p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-info/10 text-info"><Icon name="lucide:link" class="h-4 w-4" /></div>
+            <div><p class="text-xl font-bold">{{ capturedAutoBoundCount }}/{{ autoBound.length }}</p><p class="text-xs text-base-content/55">Details carried forward</p></div>
+          </div>
+        </div>
+        <div class="rounded-xl border border-base-200 bg-base-100 p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-success/10 text-success"><Icon name="lucide:list-checks" class="h-4 w-4" /></div>
+            <div><p class="text-xl font-bold">{{ completedPolicyFieldCount }}/{{ fieldSchema.length }}</p><p class="text-xs text-base-content/55">Policy fields completed</p></div>
+          </div>
+        </div>
+        <div class="rounded-xl border border-base-200 bg-base-100 p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="grid h-9 w-9 place-items-center rounded-lg bg-secondary/10 text-secondary"><Icon name="lucide:layers-3" class="h-4 w-4" /></div>
+            <div><p class="text-xl font-bold">{{ customSections.length }}</p><p class="text-xs text-base-content/55">Custom sections</p></div>
+          </div>
+        </div>
+      </div>
+
       <div class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-4 p-4 sm:p-6">
-          <div>
-            <h3 class="text-base font-semibold">Information from steps 1-7</h3>
+          <div class="flex items-start gap-3">
+            <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-info/10 text-info"><Icon name="lucide:database" class="h-4 w-4" /></div>
+            <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-info">Section 1</p>
+            <h3 class="text-base font-semibold">Tender information carried forward</h3>
             <p class="text-xs text-base-content/60">
-              These details are inserted automatically into the Government of Zimbabwe goods SBD.
+              These read-only details from steps 1–6 are inserted automatically into the Government of Zimbabwe goods SBD.
             </p>
+            </div>
           </div>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div
@@ -84,28 +97,68 @@
 
       <div class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-5 p-4 sm:p-6">
-          <div>
-            <h3 class="text-base font-semibold">SBD policy and contract details</h3>
-            <p class="text-xs text-base-content/60">
-              Review the bidding-procedure and Special Conditions fields that are not captured in earlier steps.
-            </p>
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="flex items-start gap-3">
+              <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-success/10 text-success"><Icon name="lucide:clipboard-pen-line" class="h-4 w-4" /></div>
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-success">Section 2</p>
+                <h3 class="text-base font-semibold">Policy and contract details</h3>
+                <p class="text-xs text-base-content/60">
+                  Complete the bidding-procedure and Special Conditions fields that were not captured earlier.
+                </p>
+              </div>
+            </div>
+            <button
+              class="btn btn-outline btn-primary btn-sm shrink-0"
+              type="button"
+              :disabled="saving || loading || autofilling || !aiRiskAcknowledged"
+              :title="aiRiskAcknowledged ? 'Draft policy fields with AI' : 'Acknowledge the AI accuracy warning first'"
+              @click="autofillPolicyFields"
+            >
+              <span v-if="autofilling" class="loading loading-spinner loading-xs" />
+              <Icon v-else name="lucide:sparkles" class="h-4 w-4" />
+              {{ autofilling ? 'Generating…' : 'Draft fields with AI' }}
+            </button>
           </div>
 
-          <section v-for="group in fieldGroups" :key="group.name" class="space-y-3">
-            <h4 class="border-b border-base-200 pb-2 text-sm font-semibold">{{ group.name }}</h4>
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-warning/40 bg-warning/10 p-3">
+            <div class="flex items-start gap-2">
+              <Icon name="lucide:triangle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div class="min-w-0">
+                <p class="text-sm font-semibold">AI-generated content requires human review</p>
+                <p class="mt-0.5 text-xs text-base-content/65">AI may produce inaccurate or invented contract details. Verify every suggested value before saving.</p>
+                <label class="mt-2 flex cursor-pointer items-start gap-2 text-xs font-medium">
+                  <input v-model="aiRiskAcknowledged" type="checkbox" class="checkbox checkbox-warning checkbox-sm" :disabled="autofilling">
+                  <span>I understand and will review all AI-generated fields.</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <details
+            v-for="(group, groupIndex) in fieldGroups"
+            :key="group.name"
+            class="group overflow-hidden rounded-xl border border-base-200 bg-base-100"
+            :open="groupIndex === 0"
+          >
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 bg-base-200/35 px-4 py-3 hover:bg-base-200/60">
+              <div class="flex items-center gap-3">
+                <div class="grid h-8 w-8 place-items-center rounded-lg bg-base-100 text-primary shadow-sm"><Icon :name="groupIcon(group.name)" class="h-4 w-4" /></div>
+                <div><h4 class="text-sm font-semibold">{{ group.name }}</h4><p class="text-xs text-base-content/50">{{ groupCompletedCount(group) }} of {{ group.fields.length }} fields completed</p></div>
+              </div>
+              <Icon name="lucide:chevron-down" class="h-4 w-4 transition-transform group-open:rotate-180" />
+            </summary>
+            <div class="grid grid-cols-1 gap-4 border-t border-base-200 p-4 lg:grid-cols-2">
               <label
                 v-for="field in group.fields"
                 :key="field.key"
-                :class="['fieldset', field.type === 'textarea' ? 'lg:col-span-2' : '']"
+                :class="['fieldset rounded-lg border border-base-200 bg-base-200/15 p-3', field.type === 'textarea' ? 'lg:col-span-2' : '']"
               >
-                <span class="fieldset-legend">{{ field.label }}</span>
-                <input
-                  v-if="field.type === 'boolean'"
-                  v-model="values[field.key]"
-                  type="checkbox"
-                  class="toggle toggle-primary"
-                />
+                <span class="fieldset-legend text-xs font-semibold">{{ field.label }}</span>
+                <div v-if="field.type === 'boolean'" class="flex items-center justify-between rounded-lg bg-base-100 px-3 py-2">
+                  <span class="text-sm text-base-content/65">{{ values[field.key] ? 'Yes, applies' : 'No, does not apply' }}</span>
+                  <input v-model="values[field.key]" type="checkbox" class="toggle toggle-primary toggle-sm" />
+                </div>
                 <textarea
                   v-else-if="field.type === 'textarea'"
                   v-model="values[field.key]"
@@ -122,19 +175,23 @@
                 <span v-if="field.help" class="label-text-alt mt-1 text-base-content/50">{{ field.help }}</span>
               </label>
             </div>
-          </section>
+          </details>
         </div>
       </div>
 
       <!-- Custom sections (procuring-entity flexibility) -->
       <div class="card border border-base-200 bg-base-100 shadow-sm">
         <div class="card-body gap-4 p-4 sm:p-6">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex items-start gap-3">
+              <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-secondary/10 text-secondary"><Icon name="lucide:panels-top-left" class="h-4 w-4" /></div>
+              <div>
+              <p class="text-xs font-semibold uppercase tracking-wider text-secondary">Section 3</p>
               <h3 class="text-base font-semibold">Custom sections</h3>
               <p class="text-xs text-base-content/60">
-                Add your own sections for anything the template does not cover. Each appears in the document.
+                Add tender-specific content that is not covered by the standard template. This section is optional.
               </p>
+              </div>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <button type="button" class="btn btn-ghost btn-sm" @click="openLibrary">
@@ -148,7 +205,11 @@
             </div>
           </div>
 
-          <p v-if="!customSections.length" class="text-sm text-base-content/50">No custom sections.</p>
+          <div v-if="!customSections.length" class="rounded-xl border border-dashed border-base-300 bg-base-200/20 p-8 text-center">
+            <div class="mx-auto grid h-10 w-10 place-items-center rounded-full bg-base-200 text-base-content/45"><Icon name="lucide:layout-template" class="h-5 w-5" /></div>
+            <p class="mt-3 text-sm font-medium">No custom sections added</p>
+            <p class="mt-1 text-xs text-base-content/50">Use a reusable library section or create one specifically for this tender.</p>
+          </div>
 
           <div
             v-for="(section, si) in customSections"
@@ -247,6 +308,26 @@
                 <Icon name="lucide:plus" class="h-3.5 w-3.5" /> Add item
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sticky bottom-3 z-20 rounded-2xl border border-base-300 bg-base-100/95 p-3 shadow-xl backdrop-blur sm:p-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-3">
+            <div class="radial-progress text-primary" :style="`--value:${policyCompletionPercent}; --size:2.5rem; --thickness:3px`" role="progressbar">{{ policyCompletionPercent }}%</div>
+            <div><p class="text-sm font-semibold">SBD preparation</p><p class="text-xs text-base-content/55">Preview the document before continuing to the final review.</p></div>
+          </div>
+          <div class="flex items-center justify-end gap-2">
+            <button class="btn btn-ghost btn-sm" type="button" :disabled="saving || loading" @click="save">
+              <span v-if="saving && !continuing" class="loading loading-spinner loading-xs" />
+              <Icon v-else name="lucide:save" class="h-4 w-4" />
+              Save draft
+            </button>
+            <button class="btn btn-primary btn-sm" type="button" :disabled="saving || loading" @click="saveAndContinue">
+              <span v-if="saving && continuing" class="loading loading-spinner loading-xs" />
+              <template v-else>Save &amp; continue <Icon name="lucide:arrow-right" class="h-4 w-4" /></template>
+            </button>
           </div>
         </div>
       </div>
@@ -381,6 +462,7 @@ const saving = ref(false);
 const continuing = ref(false);
 const autofilling = ref(false);
 const errorMessage = ref('');
+const aiRiskAcknowledged = ref(false);
 
 const fieldSchema = ref([]);
 const autoBound = ref([]);
@@ -411,6 +493,37 @@ const fieldGroups = computed(() => {
   }
   return groups;
 });
+
+function isFieldCompleted(field) {
+  if (field.type === 'boolean') return typeof values[field.key] === 'boolean';
+  const value = values[field.key];
+  return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+const capturedAutoBoundCount = computed(() => autoBound.value.filter(item => {
+  const value = item?.value;
+  return value !== null && value !== undefined && String(value).trim() !== '';
+}).length);
+
+const completedPolicyFieldCount = computed(() => fieldSchema.value.filter(isFieldCompleted).length);
+const policyCompletionPercent = computed(() => {
+  if (!fieldSchema.value.length) return 0;
+  return Math.round((completedPolicyFieldCount.value / fieldSchema.value.length) * 100);
+});
+
+function groupCompletedCount(group) {
+  return (group?.fields ?? []).filter(isFieldCompleted).length;
+}
+
+function groupIcon(groupName) {
+  const icons = {
+    'Bidding Procedures': 'lucide:send',
+    'Evaluation & Preference': 'lucide:scale',
+    'Delivery & Statement of Requirements': 'lucide:truck',
+    'Special Conditions of Contract': 'lucide:file-check-2',
+  };
+  return icons[groupName] ?? 'lucide:folder-pen';
+}
 
 function plainSections() {
   return customSections.value.map((s) => {

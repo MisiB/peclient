@@ -1,246 +1,153 @@
 <template>
   <div>
-    <button class="btn btn-outline btn-sm" @click="openModal">
+    <button type="button" class="btn btn-outline btn-sm" :disabled="disabled" @click="open">
       <Icon name="lucide:upload" />
-      <span class="hidden md:block">Import Items</span>
+      Import file
     </button>
 
-    <dialog id="import_apitem_modal" class="modal">
+    <dialog ref="dialog" class="modal" @cancel.prevent="close">
       <div class="modal-box max-w-2xl">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold">Import Plan Items</h3>
-          <button class="btn btn-ghost btn-circle" :disabled="isPolling" @click="closeModal">
+          <div>
+            <h3 class="text-lg font-bold">Import items into local draft</h3>
+            <p class="mt-1 text-sm text-base-content/60">
+              The file is parsed for review only. Nothing is added to the plan until every row has a UNSPSC commodity and you click Bulk upload.
+            </p>
+          </div>
+          <button type="button" class="btn btn-circle btn-ghost btn-sm" :disabled="loading" aria-label="Close import" @click="close">
             <Icon name="lucide:x" />
           </button>
         </div>
 
-        <p class="mt-2 text-sm text-base-content/60">
-          Upload an Excel (.xlsx, .xls) or CSV file. The first row must be the header.
-          Large files are processed in the background — you can leave this dialog open to watch progress.
-        </p>
-
         <button
           type="button"
-          class="link link-primary mt-2 inline-flex items-center gap-1 text-sm disabled:opacity-50"
-          :disabled="downloadingTemplate"
+          class="link link-primary mt-3 inline-flex items-center gap-1 text-sm disabled:opacity-50"
+          :disabled="downloadingTemplate || loading"
           @click="downloadTemplate"
         >
           <Icon name="lucide:download" />
-          {{ downloadingTemplate ? 'Preparing template...' : 'Download Excel template (with dropdowns)' }}
+          {{ downloadingTemplate ? 'Preparing template…' : 'Download Excel template' }}
         </button>
 
-        <!-- Upload form -->
-        <div v-if="!current" class="mt-4 flex flex-col gap-3">
+        <div v-if="errorMessage" class="alert alert-error mt-4 text-sm" role="alert">
+          <Icon name="lucide:alert-circle" />
+          <span>{{ errorMessage }}</span>
+        </div>
+
+        <div class="mt-4 space-y-3">
           <input
             ref="fileInput"
             type="file"
             accept=".xlsx,.xls,.csv,.txt"
             class="file-input file-input-bordered w-full"
+            :disabled="loading"
             @change="onFileChange"
           />
-          <div class="modal-action">
-            <button class="btn" type="button" @click="closeModal">Close</button>
-            <button
-              class="btn btn-primary"
-              :disabled="!file || uploading"
-              @click="upload"
-            >
-              <span v-if="uploading">Uploading...</span>
-              <span v-else>Upload &amp; Import</span>
-            </button>
-          </div>
+          <p class="text-xs text-base-content/60">Up to 5,000 rows can be loaded. Imported rows remain in this browser for the signed-in user and plan.</p>
         </div>
 
-        <!-- Status / Progress -->
-        <div v-else class="mt-4">
-          <div class="flex items-center justify-between">
-            <div class="font-semibold">{{ current.original_filename }}</div>
-            <span :class="['badge', statusBadge(current.status)]">{{ current.status }}</span>
-          </div>
-
-          <div class="mt-3">
-            <progress
-              v-if="current.total_rows"
-              class="progress progress-primary w-full"
-              :value="current.processed_rows ?? 0"
-              :max="current.total_rows"
-            ></progress>
-            <progress v-else class="progress progress-primary w-full"></progress>
-
-            <div class="mt-1 flex justify-between text-xs text-base-content/60">
-              <span>
-                {{ current.processed_rows ?? 0 }}<template v-if="current.total_rows"> / {{ current.total_rows }}</template> rows
-              </span>
-              <span>
-                Inserted {{ current.inserted ?? 0 }} · Skipped {{ current.skipped ?? 0 }}
-              </span>
-            </div>
-          </div>
-
-          <div v-if="current.failure_reason" role="alert" class="alert alert-error mt-3 text-sm">
-            <Icon name="lucide:alert-circle" />
-            <span>{{ current.failure_reason }}</span>
-          </div>
-
-          <div v-if="current.errors?.length" class="mt-3">
-            <div class="text-sm font-semibold">First {{ current.errors.length }} row error{{ current.errors.length === 1 ? '' : 's' }}:</div>
-            <ul class="mt-1 max-h-48 overflow-auto rounded border border-base-200 bg-base-100 p-2 text-xs">
-              <li v-for="(e, i) in current.errors" :key="i" class="font-mono">{{ e }}</li>
-            </ul>
-          </div>
-
-          <div class="modal-action">
-            <button class="btn" type="button" :disabled="isPolling" @click="closeModal">
-              {{ isTerminal ? 'Done' : 'Hide' }}
-            </button>
-            <button
-              v-if="isTerminal"
-              class="btn btn-primary"
-              type="button"
-              @click="startNew"
-            >
-              Import Another
-            </button>
-          </div>
+        <div class="modal-action">
+          <button type="button" class="btn" :disabled="loading" @click="close">Cancel</button>
+          <button type="button" class="btn btn-primary" :disabled="!file || loading" @click="loadIntoDraft">
+            <span v-if="loading" class="loading loading-spinner loading-sm" />
+            {{ loading ? 'Reading file…' : 'Load into local draft' }}
+          </button>
         </div>
       </div>
+      <form method="dialog" class="modal-backdrop"><button type="button" @click="close">close</button></form>
     </dialog>
   </div>
 </template>
 
 <script setup>
-import { usePeClient } from '~/composables/usePeClient';
-
 const props = defineProps({
   planUuid: { type: String, required: true },
-});
+  supplementUuid: { type: String, default: null },
+  disabled: { type: Boolean, default: false },
+})
 
-const store = useAnnualprocurementplanStore();
+const emit = defineEmits(['imported'])
+const client = usePeClient()
+const toast = useToast()
+const dialog = ref(null)
+const fileInput = ref(null)
+const file = ref(null)
+const loading = ref(false)
+const downloadingTemplate = ref(false)
+const errorMessage = ref('')
 
-const fileInput = ref(null);
-const file = ref(null);
-const uploading = ref(false);
-const current = ref(null);
-const downloadingTemplate = ref(false);
-let pollHandle = null;
+function open() {
+  errorMessage.value = ''
+  dialog.value?.showModal?.()
+}
 
-const client = usePeClient();
-const toast = useToast();
+function resetFile() {
+  file.value = null
+  if (fileInput.value) fileInput.value.value = ''
+}
 
-const downloadTemplate = async () => {
-  if (downloadingTemplate.value) return;
-  downloadingTemplate.value = true;
+function close() {
+  if (loading.value) return
+  dialog.value?.close?.()
+  resetFile()
+  errorMessage.value = ''
+}
+
+function onFileChange(event) {
+  file.value = event.target.files?.[0] ?? null
+  errorMessage.value = ''
+}
+
+async function loadIntoDraft() {
+  if (!file.value || loading.value) return
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const body = new FormData()
+    body.append('file', file.value)
+    const endpoint = props.supplementUuid
+      ? `/api/v1/annual-procurement-plans/${props.planUuid}/supplements/${props.supplementUuid}/items/import-preview`
+      : `/api/v1/annual-procurement-plans/${props.planUuid}/items/import-preview`
+    const response = await client(endpoint, {
+      method: 'POST',
+      body,
+    })
+    const preview = response.data ?? {}
+    emit('imported', preview.rows ?? [], preview.warnings ?? [])
+    loading.value = false
+    close()
+  } catch (error) {
+    errorMessage.value = error.data?.message || Object.values(error.data?.errors || {}).flat().join(' ') || 'The file could not be loaded.'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function downloadTemplate() {
+  if (downloadingTemplate.value) return
+  downloadingTemplate.value = true
   try {
     const blob = await client('/api/v1/annual-procurement-plans/items/template', {
       method: 'GET',
       responseType: 'blob',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'annualprocurementplan_items_template.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (err) {
+    })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'annualprocurementplan_items_template.xlsx'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
     toast.error({
       title: 'Download failed',
-      message: err?.data?.message || 'Could not download the template.',
+      message: error.data?.message || 'Could not download the template.',
       position: 'topRight',
       layout: 2,
-    });
+    })
   } finally {
-    downloadingTemplate.value = false;
+    downloadingTemplate.value = false
   }
-};
-
-const isTerminal = computed(() =>
-  current.value?.status === 'COMPLETED' || current.value?.status === 'FAILED',
-);
-
-const isPolling = computed(() =>
-  current.value && !isTerminal.value,
-);
-
-const openModal = () => {
-  document.getElementById('import_apitem_modal').showModal();
-};
-
-const closeModal = () => {
-  document.getElementById('import_apitem_modal').close();
-  stopPolling();
-  current.value = null;
-  file.value = null;
-  if (fileInput.value) fileInput.value.value = '';
-};
-
-const onFileChange = (event) => {
-  file.value = event.target.files?.[0] ?? null;
-};
-
-const upload = async () => {
-  if (!file.value) return;
-  uploading.value = true;
-  try {
-    const importRecord = await store.beginImport(props.planUuid, file.value);
-    if (importRecord) {
-      current.value = importRecord;
-      startPolling();
-    }
-  } finally {
-    uploading.value = false;
-  }
-};
-
-const startPolling = () => {
-  stopPolling();
-  pollHandle = setInterval(pollOnce, 1500);
-};
-
-const stopPolling = () => {
-  if (pollHandle) {
-    clearInterval(pollHandle);
-    pollHandle = null;
-  }
-};
-
-const pollOnce = async () => {
-  if (!current.value?.uuid) return;
-  const fresh = await store.fetchImport(props.planUuid, current.value.uuid);
-  if (fresh) {
-    current.value = fresh;
-    if (fresh.status === 'COMPLETED' || fresh.status === 'FAILED') {
-      stopPolling();
-      if (fresh.status === 'COMPLETED') {
-        // Refresh paginated items + aggregates + unresolved summary so the
-        // newly imported rows + totals + Issues badge update.
-        await Promise.all([
-          store.fetchPlan(props.planUuid),
-          store.fetchGroupedItems(props.planUuid, { page: 1 }),
-          store.fetchItemTotals(props.planUuid),
-          store.fetchItemTotalsByGroup(props.planUuid),
-          store.fetchItemTotalsByFlag(props.planUuid),
-          store.fetchUnresolved(props.planUuid),
-        ]);
-      }
-    }
-  }
-};
-
-const startNew = () => {
-  current.value = null;
-  file.value = null;
-  if (fileInput.value) fileInput.value.value = '';
-};
-
-const statusBadge = (status) => {
-  if (status === 'COMPLETED') return 'badge-success';
-  if (status === 'PROCESSING') return 'badge-info';
-  if (status === 'PENDING') return 'badge-warning';
-  if (status === 'FAILED') return 'badge-error';
-  return 'badge-ghost';
-};
-
-onBeforeUnmount(stopPolling);
+}
 </script>

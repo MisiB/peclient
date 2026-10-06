@@ -1,11 +1,12 @@
 <template>
   <div class="mt-3 space-y-4">
+    <AnnualprocurementplansReturnAlert :transitions="store.transitions" />
     <!-- Header / hero -->
     <div class="relative overflow-hidden rounded-2xl border border-base-200 bg-gradient-to-br from-primary/10 via-base-100 to-base-100 shadow-sm">
       <div class="absolute inset-y-0 left-0 w-1.5 bg-primary"></div>
       <div class="p-5 sm:p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
               <Icon name="lucide:clipboard-list" class="h-4 w-4" />
               Annual Procurement Plan
@@ -15,20 +16,6 @@
               <span class="text-base-content/25">/</span>
               <span class="text-base-content/80">{{ plan?.company?.name ?? '' }}</span>
             </h1>
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <span :class="['badge badge-lg gap-1.5', statusBadge(plan?.status)]">
-                <Icon name="lucide:circle-dot" class="h-3.5 w-3.5" />
-                {{ formatStatus(plan?.status) }}
-              </span>
-              <span v-if="plan?.paymentstatus" :class="['badge badge-lg gap-1.5', paymentStatusBadge(plan?.paymentstatus)]">
-                <Icon name="lucide:credit-card" class="h-3.5 w-3.5" />
-                {{ formatPaymentStatus(plan?.paymentstatus) }}
-              </span>
-              <span v-if="plan?.currency" class="badge badge-lg badge-outline gap-1.5">
-                <Icon name="lucide:coins" class="h-3.5 w-3.5" />
-                {{ plan.currency.code }}<template v-if="plan.currency.symbol"> · {{ plan.currency.symbol }}</template>
-              </span>
-            </div>
             <div v-if="plan?.submitted_at" class="mt-3 flex items-center gap-1.5 text-xs text-base-content/50">
               <Icon name="lucide:send" class="h-3.5 w-3.5" />
               Submitted by {{ plan.submitted_by_user?.name || plan.submittedBy?.name || '—' }}
@@ -36,15 +23,25 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
-            <AnnualprocurementplansClassificationMatch :plan-uuid="planUuid" :can-edit="canEditPlan" />
-            <AnnualprocurementplansAnalyzePlan :plan-uuid="planUuid" :can-edit="canEditPlan" />
-            <AnnualprocurementplansWorkflowActions :plan-uuid="planUuid" />
+          <div class="flex w-full flex-col gap-3 sm:w-auto sm:min-w-64">
+            <section aria-label="Default plan currency" class="rounded-xl border border-primary/25 bg-base-100 p-4 shadow-sm">
+              <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">
+                <Icon name="lucide:coins" class="h-4 w-4 text-primary" />
+                Default plan currency
+              </div>
+              <p class="mt-2 text-2xl font-bold tracking-tight text-primary">{{ plan?.currency?.code || 'Not specified' }}</p>
+            </section>
+            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+              <AnnualprocurementplansAnalyzePlan v-if="showPreparationSteps" :plan-uuid="planUuid" :can-edit="canEditPlan" />
+              <AnnualprocurementplansWorkflowActions :plan-uuid="planUuid" />
+            </div>
           </div>
         </div>
 
+        <AnnualprocurementplansStatus :plan-uuid="planUuid" :plan="plan" />
+
         <!-- Stat strip -->
-        <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
             <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
               <Icon name="lucide:wallet" class="h-4 w-4" /> Total Budget
@@ -61,12 +58,6 @@
           </div>
           <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
             <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
-              <Icon name="lucide:layers" class="h-4 w-4" /> Consolidated
-            </div>
-            <div class="mt-1 text-xl font-bold">{{ store.groupedConsolidated.length }}</div>
-          </div>
-          <div class="rounded-xl border border-base-200 bg-base-100/70 p-3 backdrop-blur">
-            <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/50">
               <Icon name="lucide:alert-triangle" class="h-4 w-4" /> Issues
             </div>
             <div class="mt-1 text-xl font-bold" :class="unresolvedCount > 0 ? 'text-warning' : 'text-success'">{{ unresolvedCount }}</div>
@@ -75,11 +66,13 @@
       </div>
     </div>
 
+    <AnnualprocurementplansCompletion v-if="showPreparationSteps" :plan-uuid="planUuid" @select="activeTab = $event" />
+
     <!-- Tabs + active tab content -->
     <div class="card overflow-hidden rounded-2xl border border-base-200 shadow-sm">
-      <div class="card-body p-0">
-        <div class="sticky top-0 z-20 overflow-x-auto border-b border-base-200 bg-base-100/90 backdrop-blur">
-          <div role="tablist" class="tabs tabs-border min-w-max px-3 pt-1">
+      <div class="card-body gap-0 p-0 lg:flex-row">
+        <div class="shrink-0 border-b border-base-200 bg-base-100 lg:w-64 lg:border-r lg:border-b-0">
+          <div role="tablist" aria-label="Annual procurement plan sections" aria-orientation="vertical" class="plan-tabs flex flex-col gap-1 p-3">
           <button
             role="tab"
             class="tab"
@@ -88,7 +81,17 @@
           >
             <Icon name="lucide:list" class="mr-1" />
             Plan Items
-            <span class="badge badge-sm ml-2">{{ totalItems }}</span>
+            <span class="badge badge-sm ml-2">{{ visiblePlanItemsCount }}</span>
+          </button>
+          <button
+            role="tab"
+            class="tab"
+            :class="{ 'tab-active': activeTab === 'consolidation' }"
+            @click="activeTab = 'consolidation'"
+          >
+            <Icon name="lucide:combine" class="mr-1" />
+            Consolidation
+            <span class="badge badge-primary badge-sm ml-2">{{ consolidationCount }}</span>
           </button>
           <button
             role="tab"
@@ -129,7 +132,7 @@
             @click="activeTab = 'pmu'"
           >
             <Icon name="lucide:building-2" class="mr-1" />
-            Procurement Management Unit
+            PMU
             <span class="badge badge-sm ml-2">{{ store.pmuMembersMeta.total }}</span>
           </button>
           <button
@@ -165,16 +168,16 @@
           </div>
         </div>
 
-        <div class="space-y-4 p-4 sm:p-5">
+        <div class="min-w-0 flex-1 space-y-4 p-4 sm:p-5">
         <!-- Plan Items -->
         <div v-if="activeTab === 'items'">
           <div class="mt-3 flex justify-end gap-2">
-            <AnnualprocurementplansItemImport v-if="canAdd && canEditPlan" :plan-uuid="planUuid" />
-            <AnnualprocurementplansItemAdd v-if="canAdd && canEditPlan" :plan-uuid="planUuid" />
+            <NuxtLink v-if="canAdd && canEditPlan" :to="`/annualprocurementplans/${planUuid}/add-items`" class="btn btn-success btn-sm"><Icon name="lucide:plus" />Add items</NuxtLink>
+            <AnnualprocurementplansItemBulkDelete v-if="canDelete && canEditPlan" :plan-uuid="planUuid" />
           </div>
 
-          <!-- Totals by procurement method / group / flags -->
-          <div v-if="store.itemTotals.length || store.itemTotalsByGroup.length || store.itemTotalsByFlag.length" class="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <!-- Totals by procurement method / group / award type / flags -->
+          <div v-if="store.itemTotals.length || store.itemTotalsByGroup.length || hasAwardTypeData || (totalItems > 0 && store.itemTotalsByFlag.length)" class="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <AnnualprocurementplansTotalsBars
               v-if="store.itemTotals.length"
               title="Totals by Procurement Method"
@@ -198,7 +201,18 @@
               show-footer
             />
             <AnnualprocurementplansTotalsBars
-              v-if="store.itemTotalsByFlag.length"
+              v-if="hasAwardTypeData"
+              title="Award / Framework Statistics"
+              icon="lucide:award"
+              accent="primary"
+              :rows="store.itemTotalsByAwardType"
+              :denominator="awardTypeTotal"
+              :total-items="awardTypeItemCount"
+              :grand-total="awardTypeTotal"
+              show-footer
+            />
+            <AnnualprocurementplansTotalsBars
+              v-if="totalItems > 0 && store.itemTotalsByFlag.length"
               title="Totals by Flag"
               icon="lucide:flag"
               accent="accent"
@@ -271,18 +285,6 @@
                       </div>
                     </div>
 
-                    <div>
-                      <div class="mb-1.5 text-sm font-semibold">Consumption mode</div>
-                      <select
-                        v-model="itemsFilters.consumption_mode"
-                        class="select select-bordered select-sm w-full"
-                        @change="onConsumptionModeChange"
-                      >
-                        <option value="">Any</option>
-                        <option value="ONCE_OFF">Once off</option>
-                        <option value="DRILL_DOWN">Drill down</option>
-                      </select>
-                    </div>
                   </div>
 
                   <div class="modal-action">
@@ -302,128 +304,102 @@
                 </form>
               </dialog>
 
-              <div v-if="store.groupedItemsLoading" class="flex justify-center py-10">
+              <div v-if="store.planItemsLoading" class="flex justify-center py-10">
                 <span class="loading loading-spinner loading-lg"></span>
               </div>
 
               <template v-else>
-                <!-- Sub-tabs: consolidated groups vs individual rows. -->
-                <div class="mt-3">
-                  <div role="tablist" class="tabs tabs-box tabs-sm inline-flex bg-base-200/60">
-                    <button
-                      role="tab"
-                      type="button"
-                      class="tab gap-1.5"
-                      :class="{ 'tab-active': effectiveItemsView === 'consolidated' }"
-                      :disabled="!store.groupedConsolidated.length"
-                      @click="itemsView = 'consolidated'"
-                    >
-                      <Icon name="lucide:layers" class="h-4 w-4" />
-                      Consolidated
-                      <span class="badge badge-xs">{{ store.groupedConsolidated.length }}</span>
-                    </button>
-                    <button
-                      role="tab"
-                      type="button"
-                      class="tab gap-1.5"
-                      :class="{ 'tab-active': effectiveItemsView === 'individual' }"
-                      @click="itemsView = 'individual'"
-                    >
-                      <Icon name="lucide:list" class="h-4 w-4" />
-                      Individual
-                      <span class="badge badge-xs">{{ store.groupedIndividualMeta.total }}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Consolidated items: rows sharing a reference number, shown
-                     as one collapsible line carrying only the total qty/budget;
-                     unit prices live on the children when drilled down. -->
-                <div v-if="effectiveItemsView === 'consolidated'" class="mt-3 space-y-2">
-                  <AnnualprocurementplansConsolidatedRow
-                    v-for="grp in store.groupedConsolidated"
-                    :key="grp.reference_no"
-                    :group="grp"
-                    :plan-uuid="planUuid"
-                    :currency="currencySymbol"
-                    :can-edit="canEdit"
-                    :can-delete="canDelete"
-                    :can-edit-plan="canEditPlan"
-                  />
-                </div>
-
-                <!-- Individual items: null/unique reference rows, paginated. -->
-                <template v-else>
-                  <div class="mt-3 overflow-hidden rounded-xl border border-base-200">
+                <div class="mt-3 overflow-x-auto rounded-xl border border-base-200">
                     <div
-                      v-if="!store.groupedIndividual.length"
+                      v-if="!store.planItems.length"
                       class="p-6 text-center text-sm text-base-content/50"
                     >
                       {{ (itemsSearch || activeFilterCount > 0)
-                        ? 'No individual items match the current search / filters.'
-                        : (store.groupedConsolidated.length
-                          ? 'All matching items are consolidated.'
-                          : 'No items yet. Add an item to start building the plan.') }}
+                        ? 'No items match the current search / filters.'
+                        : 'No items yet. Add an item to start building the plan.' }}
                     </div>
-                    <div v-else class="divide-y divide-base-200">
-                      <AnnualprocurementplansPlanItemRow
-                        v-for="it in store.groupedIndividual"
-                        :key="it.id"
-                        :item="it"
-                        :plan-uuid="planUuid"
-                        :can-edit="canEdit"
-                        :can-delete="canDelete"
-                        :can-edit-plan="canEditPlan"
-                      />
-                    </div>
+                    <table v-else class="table table-sm min-w-[1500px]">
+                      <thead class="sticky top-0 z-30 bg-base-200">
+                        <tr>
+                          <th class="sticky left-0 z-40 w-36 min-w-36 border-r border-base-300 bg-base-200">Reference</th>
+                          <th class="sticky left-36 z-40 w-80 min-w-80 border-r border-base-300 bg-base-200">Description</th>
+                          <th>Procurement group</th>
+                          <th>Procurement method</th>
+                          <th>Award type</th>
+                          <th>Quarter</th>
+                          <th class="text-right">Quantity</th>
+                          <th class="text-right">Unit cost</th>
+                          <th class="text-right">Total</th>
+                          <th class="text-right">Balance</th>
+                          <th>Status</th>
+                          <th>Flags</th>
+                          <th class="sticky right-0 z-50 w-36 min-w-36 border-l border-primary/30 bg-primary text-right text-primary-content shadow-[-8px_0_14px_-10px_rgba(0,0,0,0.45)]">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <AnnualprocurementplansPlanItemRow
+                          v-for="it in store.planItems"
+                          :key="it.id"
+                          :item="it"
+                          :plan-uuid="planUuid"
+                          :can-edit="canEdit"
+                          :can-delete="canDelete"
+                          :can-edit-plan="canEditPlan"
+                        />
+                      </tbody>
+                    </table>
                   </div>
 
-                  <!-- Pagination (individual list) -->
-                  <div v-if="store.groupedIndividualMeta.last_page > 1" class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <!-- Pagination -->
+                  <div v-if="store.planItemsMeta.last_page > 1" class="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <div class="text-xs text-base-content/60">
-                      Page {{ store.groupedIndividualMeta.current_page }} of {{ store.groupedIndividualMeta.last_page }}
-                      · {{ store.groupedIndividualMeta.total }} total
+                      Page {{ store.planItemsMeta.current_page }} of {{ store.planItemsMeta.last_page }}
+                      · {{ store.planItemsMeta.total }} total
                     </div>
                     <div class="join">
                       <button
                         class="btn btn-sm join-item"
-                        :disabled="store.groupedIndividualMeta.current_page <= 1 || store.groupedItemsLoading"
+                        :disabled="store.planItemsMeta.current_page <= 1 || store.planItemsLoading"
                         @click="goToPage(1)"
                       >
                         <Icon name="lucide:chevrons-left" />
                       </button>
                       <button
                         class="btn btn-sm join-item"
-                        :disabled="store.groupedIndividualMeta.current_page <= 1 || store.groupedItemsLoading"
-                        @click="goToPage(store.groupedIndividualMeta.current_page - 1)"
+                        :disabled="store.planItemsMeta.current_page <= 1 || store.planItemsLoading"
+                        @click="goToPage(store.planItemsMeta.current_page - 1)"
                       >
                         <Icon name="lucide:chevron-left" />
                         Prev
                       </button>
                       <button class="btn btn-sm join-item btn-disabled">
-                        {{ store.groupedIndividualMeta.current_page }}
+                        {{ store.planItemsMeta.current_page }}
                       </button>
                       <button
                         class="btn btn-sm join-item"
-                        :disabled="store.groupedIndividualMeta.current_page >= store.groupedIndividualMeta.last_page || store.groupedItemsLoading"
-                        @click="goToPage(store.groupedIndividualMeta.current_page + 1)"
+                        :disabled="store.planItemsMeta.current_page >= store.planItemsMeta.last_page || store.planItemsLoading"
+                        @click="goToPage(store.planItemsMeta.current_page + 1)"
                       >
                         Next
                         <Icon name="lucide:chevron-right" />
                       </button>
                       <button
                         class="btn btn-sm join-item"
-                        :disabled="store.groupedIndividualMeta.current_page >= store.groupedIndividualMeta.last_page || store.groupedItemsLoading"
-                        @click="goToPage(store.groupedIndividualMeta.last_page)"
+                        :disabled="store.planItemsMeta.current_page >= store.planItemsMeta.last_page || store.planItemsLoading"
+                        @click="goToPage(store.planItemsMeta.last_page)"
                       >
                         <Icon name="lucide:chevrons-right" />
                       </button>
                     </div>
                   </div>
-                </template>
               </template>
             </div>
           </div>
+        </div>
+
+        <!-- Manual consolidation -->
+        <div v-else-if="activeTab === 'consolidation'">
+          <AnnualprocurementplansConsolidation :plan-uuid="planUuid" :can-edit="canEditPlan" @count-change="onConsolidationCountChange" />
         </div>
 
         <!-- Issues -->
@@ -553,6 +529,7 @@
 
         <!-- Evaluation Committee -->
         <div v-else-if="activeTab === 'evaluation'">
+          <CommitteesAttach :plan-uuid="planUuid" type="EVALUATION" :can-edit="canEdit && canEditPlan" :member-count="store.committeeMembersMeta.total" />
           <Evaluationcommittees
             :plan-uuid="planUuid"
             :can-add="canAdd && canEditPlan"
@@ -563,6 +540,7 @@
 
         <!-- Procurement Management Unit -->
         <div v-else-if="activeTab === 'pmu'">
+          <CommitteesAttach :plan-uuid="planUuid" type="PMU" :can-edit="canEdit && canEditPlan" :member-count="store.pmuMembersMeta.total" />
           <Procurementmanagementunits
             :plan-uuid="planUuid"
             :can-add="canAdd && canEditPlan"
@@ -573,6 +551,7 @@
 
         <!-- Disposal Committee -->
         <div v-else-if="activeTab === 'disposalcommittee'">
+          <CommitteesAttach :plan-uuid="planUuid" type="DISPOSAL" :can-edit="canEdit && canEditPlan" :member-count="store.disposalCommitteeMembersMeta.total" />
           <Disposalcommittees
             :plan-uuid="planUuid"
             :can-add="canAdd && canEditPlan"
@@ -605,7 +584,7 @@
             </thead>
             <tbody>
               <tr v-if="!peTransitions.length">
-                <td colspan="6" class="text-center text-base-content/50">No workflow activity yet.</td>
+                <td colspan="6" class="text-center text-base-content/50">No admin authorization comments yet.</td>
               </tr>
               <tr v-for="(t, i) in peTransitions" :key="t.id ?? i">
                 <td>{{ i + 1 }}</td>
@@ -637,6 +616,8 @@
 </template>
 
 <script setup>
+import { adminAuthorizationComments } from '~/utils/planWorkflowHistory';
+
 const props = defineProps({
   planUuid: { type: String, required: true },
   canAdd: { type: Boolean, default: false },
@@ -649,38 +630,31 @@ const { currentPlan: plan } = storeToRefs(store);
 
 const activeTab = ref('items');
 
-// Sub-view within the Plan Items tab: consolidated groups vs individual rows.
-const itemsView = ref('consolidated');
-// Fall back to the individual list when there are no consolidated groups, so
-// the Consolidated sub-tab is never shown empty.
-const effectiveItemsView = computed(() =>
-  (itemsView.value === 'consolidated' && store.groupedConsolidated.length === 0)
-    ? 'individual'
-    : itemsView.value,
-);
-
 const isDraft = computed(() => store.isDraft(plan.value));
+const showPreparationSteps = computed(() => !!plan.value?.status && !['AUTHORIZED', 'ACTIVE', 'ARCHIVED'].includes(plan.value.status));
 // Only the creator of a draft can edit; everyone else sees a read-only view.
 const canEditPlan = computed(() => isDraft.value && store.workflowIsCreator);
-// PE-side workflow history hides admin-internal chatter — handler
-// recommendations, manager agree/disagree, and approver-to-manager
-// bouncebacks are all noise for the PE. Show only the PE-visible actions
-// (PE-side workflow steps + the approver's final-approve and the
-// approver-to-PE send-back).
-const PE_VISIBLE_ACTIONS = new Set([
-  'submit_for_review',
-  'review_approve',
-  'review_send_back',
-  'approve',
-  'approve_send_back',
-  'approver_approve',
-  'approver_send_back_to_pe',
-]);
 const peTransitions = computed(() =>
-  (store.transitions ?? []).filter((t) => PE_VISIBLE_ACTIONS.has(t.action)),
+  adminAuthorizationComments(store.transitions ?? []),
 );
 
-const totalItems = computed(() => plan.value?.items_count ?? store.groupedIndividualMeta?.total ?? 0);
+const totalItems = computed(() => plan.value?.items_count ?? store.planItemsMeta?.total ?? 0);
+const visiblePlanItemsCount = computed(() => store.planItemsMeta?.total ?? 0);
+const consolidationCount = ref(0);
+watch(
+  () => plan.value?.consolidations_count,
+  value => { consolidationCount.value = Number(value ?? 0); },
+  { immediate: true },
+);
+
+async function onConsolidationCountChange(count) {
+  consolidationCount.value = Number(count ?? 0);
+  if (plan.value) plan.value.consolidations_count = consolidationCount.value;
+  await Promise.all([
+    store.fetchPlanItems(props.planUuid, buildItemsOpts({ page: 1 })),
+    store.fetchItemTotalsByAwardType(props.planUuid, buildItemsOpts({ page: 1 })),
+  ]);
+}
 
 // Issues badge — sum of all unresolved (field, raw_value) groups across the
 // whole plan, not just the visible page.
@@ -696,15 +670,21 @@ const planTotal = computed(() =>
 const planGroupTotal = computed(() =>
   (store.itemTotalsByGroup ?? []).reduce((sum, row) => sum + (Number(row.total) || 0), 0),
 );
+const awardTypeTotal = computed(() =>
+  (store.itemTotalsByAwardType ?? []).reduce((sum, row) => sum + (Number(row.total) || 0), 0),
+);
+const awardTypeItemCount = computed(() =>
+  (store.itemTotalsByAwardType ?? []).reduce((sum, row) => sum + (Number(row.count) || 0), 0),
+);
+const hasAwardTypeData = computed(() => awardTypeItemCount.value > 0);
 
 // Pagination state for the items table.
 const itemsPerPage = ref(50);
 const itemsSearch = ref('');
 let searchTimer = null;
 
-// Items filter state — one boolean per filterable flag, plus a tri-state
-// consumption_mode select. Kept in one object so the build-opts helper
-// can spread it straight into the fetch call.
+// Items filter state — one boolean per filterable flag. Kept in one object
+// so the build-opts helper can spread it straight into the fetch call.
 const FILTER_FLAGS = [
   { key: 'pre_qualification', label: 'Pre-Qual' },
   { key: 'eoi', label: 'EOI' },
@@ -720,7 +700,6 @@ const itemsFilters = reactive({
   sustainable_procurement: false,
   affirmative_procurement: false,
   procurement_exemption: false,
-  consumption_mode: '',
 });
 const activeFlagCount = computed(() => {
   let n = 0;
@@ -733,42 +712,38 @@ const filtersDialog = ref(null);
 const openFilters = () => filtersDialog.value?.showModal?.();
 const closeFilters = () => filtersDialog.value?.close?.();
 
-const activeFilterCount = computed(() =>
-  activeFlagCount.value + (itemsFilters.consumption_mode ? 1 : 0),
-);
+const activeFilterCount = computed(() => activeFlagCount.value);
 
 const buildItemsOpts = (extra = {}) => ({
   per_page: itemsPerPage.value,
   search: itemsSearch.value || undefined,
   ...itemsFilters,
-  consumption_mode: itemsFilters.consumption_mode || undefined,
   ...extra,
 });
 
-// Refresh the three totals cards using the same filter set as the items
+// Refresh the totals cards using the same filter set as the items
 // list so the summary numbers always agree with the visible rows.
 const refreshFilteredTotals = (opts) => Promise.all([
   store.fetchItemTotals(props.planUuid, opts),
   store.fetchItemTotalsByGroup(props.planUuid, opts),
   store.fetchItemTotalsByFlag(props.planUuid, opts),
+  store.fetchItemTotalsByAwardType(props.planUuid, opts),
 ]);
 
 const goToPage = async (page) => {
-  if (page < 1 || page > store.groupedIndividualMeta.last_page) return;
-  // Pagination doesn't change the filter set, so the totals don't need a
-  // refresh here — just paginate the individual items list.
-  await store.fetchGroupedItems(props.planUuid, buildItemsOpts({ page }));
+  if (page < 1 || page > store.planItemsMeta.last_page) return;
+  await store.fetchPlanItems(props.planUuid, buildItemsOpts({ page }));
 };
 
 const changePerPage = async () => {
-  await store.fetchGroupedItems(props.planUuid, buildItemsOpts({ page: 1 }));
+  await store.fetchPlanItems(props.planUuid, buildItemsOpts({ page: 1 }));
 };
 
 const onSearchInput = () => {
   if (searchTimer) clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     const opts = buildItemsOpts({ page: 1 });
-    store.fetchGroupedItems(props.planUuid, opts);
+    store.fetchPlanItems(props.planUuid, opts);
     refreshFilteredTotals(opts);
   }, 250);
 };
@@ -776,30 +751,24 @@ const onSearchInput = () => {
 const toggleFlagFilter = (key) => {
   itemsFilters[key] = !itemsFilters[key];
   const opts = buildItemsOpts({ page: 1 });
-  store.fetchGroupedItems(props.planUuid, opts);
-  refreshFilteredTotals(opts);
-};
-
-const onConsumptionModeChange = () => {
-  const opts = buildItemsOpts({ page: 1 });
-  store.fetchGroupedItems(props.planUuid, opts);
+  store.fetchPlanItems(props.planUuid, opts);
   refreshFilteredTotals(opts);
 };
 
 const clearItemsFilters = () => {
   for (const f of FILTER_FLAGS) itemsFilters[f.key] = false;
-  itemsFilters.consumption_mode = '';
   const opts = buildItemsOpts({ page: 1 });
-  store.fetchGroupedItems(props.planUuid, opts);
+  store.fetchPlanItems(props.planUuid, opts);
   refreshFilteredTotals(opts);
 };
 
 const onResolved = async () => {
   await Promise.all([
-    store.fetchGroupedItems(props.planUuid, buildItemsOpts({ page: store.groupedIndividualMeta.current_page })),
+    store.fetchPlanItems(props.planUuid, buildItemsOpts({ page: store.planItemsMeta.current_page })),
     store.fetchItemTotals(props.planUuid),
     store.fetchItemTotalsByGroup(props.planUuid),
     store.fetchItemTotalsByFlag(props.planUuid),
+    store.fetchItemTotalsByAwardType(props.planUuid),
     store.fetchUnresolved(props.planUuid),
   ]);
 };
@@ -873,25 +842,6 @@ const formatStatus = (status) => {
   return status.split('_').map((s) => s.charAt(0) + s.slice(1).toLowerCase()).join(' ');
 };
 
-const statusBadge = (status) => {
-  if (status === 'ACTIVE') return 'badge-success';
-  if (status === 'PENDING_ADMIN_AUTHORIZATION') return 'badge-info';
-  if (status === 'PENDING_INTERNAL_APPROVAL') return 'badge-info';
-  if (status === 'PENDING_REVIEW') return 'badge-info';
-  if (status === 'DRAFT') return 'badge-warning';
-  return 'badge-ghost';
-};
-
-const paymentStatusBadge = (status) => {
-  if (status === 'PAID') return 'badge-success';
-  if (status === 'PARTIALLY_PAID') return 'badge-info';
-  if (status === 'PENDING') return 'badge-warning';
-  if (status === 'OVERDUE') return 'badge-error';
-  return 'badge-ghost';
-};
-
-const formatPaymentStatus = (status) => (status ?? '').replace('_', ' ');
-
 const formatAiDecision = (d) => ({
   SEND_BACK_TO_PE: 'send back',
   NEEDS_CORRECTIONS: 'needs corrections',
@@ -911,3 +861,38 @@ const currencySymbol = computed(() => {
   return c.symbol ? `${c.symbol} ` : `${c.code} `;
 });
 </script>
+
+<style scoped>
+.plan-tabs > .tab {
+  width: 100%;
+  height: auto;
+  min-height: 2.75rem;
+  justify-content: flex-start;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.plan-tabs > .tab:hover {
+  background-color: var(--color-base-200);
+}
+
+.plan-tabs > .tab-active {
+  background-color: var(--color-primary);
+  color: var(--color-primary-content);
+}
+
+.plan-tabs > .tab-active:hover {
+  background-color: var(--color-primary);
+}
+
+.plan-tabs > .tab > :deep(svg),
+.plan-tabs > .tab > .badge {
+  flex-shrink: 0;
+}
+
+.plan-tabs > .tab > .badge {
+  margin-left: auto;
+}
+</style>

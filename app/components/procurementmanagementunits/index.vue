@@ -15,9 +15,6 @@
           <option :value="100">100 / page</option>
         </select>
       </div>
-      <div>
-        <ProcurementmanagementunitsAdd v-if="canAdd" :plan-uuid="planUuid" />
-      </div>
     </div>
 
     <div v-if="store.pmuMembersLoading" class="flex justify-center py-10">
@@ -67,9 +64,7 @@
             </td>
             <td class="text-right">
               <div class="flex justify-end gap-1">
-                <ProcurementmanagementunitsMemberDetail :plan-uuid="planUuid" :item="m" :can-edit="canEdit" :can-delete="canDelete" />
-                <ProcurementmanagementunitsEdit v-if="canEdit" :plan-uuid="planUuid" :item="m" />
-                <ProcurementmanagementunitsDelete v-if="canDelete" :plan-uuid="planUuid" :item="m" />
+                <ProcurementmanagementunitsMemberDetail :plan-uuid="planUuid" :item="m" />
               </div>
             </td>
           </tr>

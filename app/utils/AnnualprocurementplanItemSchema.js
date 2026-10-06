@@ -27,8 +27,6 @@ export const AnnualprocurementplanItemSchema = yup.object({
   spoc: yup.boolean().default(false),
   sustainable_procurement: yup.boolean().default(false),
   affirmative_procurement: yup.boolean().default(false),
-  procurement_exemption: yup.boolean().default(false),
-
   eoi_publication_date: optionalDate,
   eoi_closing_date: optionalDate,
   bid_notice_publication_date: optionalDate,
@@ -48,7 +46,7 @@ export const AnnualprocurementplanItemSchema = yup.object({
   total_cost: yup.number().nullable().transform((v, orig) => (orig === '' || orig === null || orig === undefined ? null : Number(orig))),
 
   expensecategory: yup.string().oneOf(['MOOE', 'CapEx']).default('MOOE'),
-  consumption_mode: yup.string().oneOf(['ONCE_OFF', 'DRILL_DOWN']).default('ONCE_OFF'),
+  award_type: yup.string().oneOf(['AWARD', 'FRAMEWORK']).required('Award type is required').default('AWARD'),
   msds: yup.string().nullable(),
   quarter: yup.string().oneOf(['Q1', 'Q2', 'Q3', 'Q4']).nullable(),
 });

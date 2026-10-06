@@ -16,9 +16,9 @@
         </div>
       </NuxtLink>
 
-      <!-- Close button — mobile only -->
+      <!-- Close button -->
       <button
-        class="btn btn-ghost btn-sm lg:hidden"
+        class="btn btn-outline btn-circle btn-sm shadow-sm"
         aria-label="Close sidebar"
         @click="$emit('close')"
       >
@@ -37,17 +37,6 @@
           >
             <Icon name="lucide:home" class="h-4 w-4 shrink-0" />
             <span>Home</span>
-          </NuxtLink>
-        </li>
-
-        <li>
-          <NuxtLink
-            to="/legacy-archive"
-            :class="['gap-2 rounded-lg', route.path.startsWith('/legacy-archive') ? 'bg-success text-white' : '']"
-            @click="$emit('close')"
-          >
-            <Icon name="lucide:archive" class="h-4 w-4 shrink-0" />
-            <span>Legacy archive</span>
           </NuxtLink>
         </li>
 
@@ -90,11 +79,49 @@ defineEmits(['close'])
 const route = useRoute()
 const { user } = useSanctumAuth()
 const { logoutUser } = useAuthHelper()
+const { can } = useCheckPermission()
 
-const modules = ref([])
-if (user.value) {
-  modules.value = user.value.data.modules
-}
+const tenderManagementSubmenus = [
+  { id: 'my-evaluations', name: 'My Evaluations', url: '/evaluations', icon: 'lucide:clipboard-check' },
+  { id: 'tender-awaiting-approval', name: 'Awaiting approval', url: '/tenders/awaiting-approval', icon: 'lucide:clock-3' },
+  { id: 'tender-closed', name: 'Closed tenders', url: '/tenders/closed', icon: 'lucide:lock-keyhole' },
+  { id: 'tender-opened', name: 'Opened tenders', url: '/tenders/opened', icon: 'lucide:folder-open' },
+  { id: 'tender-awards', name: 'Awards', url: '/tenders/awards', icon: 'lucide:award' },
+]
+
+const modules = computed(() => {
+  const assignedModules = user.value?.data?.modules ?? []
+
+  const configuredModules = assignedModules.map((module) => {
+    const submodules = module.submodules ?? []
+    const isTenderManagement = String(module.name ?? '').toLowerCase() === 'tender management'
+      || submodules.some((submodule) => submodule.url === '/tenders')
+
+    if (!isTenderManagement) return module
+
+    const existingUrls = new Set(submodules.map((submodule) => submodule.url))
+
+    return {
+      ...module,
+      submodules: [
+        ...submodules,
+        ...tenderManagementSubmenus.filter((submenu) => !existingUrls.has(submenu.url)),
+      ],
+    }
+  })
+
+  const configuredUrls = new Set(configuredModules.flatMap(module => (module.submodules ?? []).map(submodule => submodule.url)))
+  if (can('can.access.exemptions') && !configuredUrls.has('/exemptions')) {
+    configuredModules.push({
+      id: 'exemption-workflow',
+      name: 'Exemptions',
+      icon: 'lucide:badge-check',
+      submodules: [{ id: 'exemption-applications', name: 'Applications', url: '/exemptions', icon: 'lucide:file-check-2' }],
+    })
+  }
+
+  return configuredModules
+})
 
 const imgUrl = ref('/img/prazlogo.jpg')
 const showLogoImage = ref(true)

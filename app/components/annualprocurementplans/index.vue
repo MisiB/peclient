@@ -60,7 +60,10 @@
                     <span class="hidden md:block">View</span>
                   </NuxtLink>
                   <AnnualprocurementplansEdit v-if="canEdit && store.isDraft(plan)" :item="plan" />
-                  <AnnualprocurementplansDelete v-if="canDelete && store.isDraft(plan)" :item="plan" />
+                  <AnnualprocurementplansDelete
+                    v-if="canDelete && store.isDraft(plan) && Number(plan.items_count ?? 0) === 0"
+                    :item="plan"
+                  />
                 </div>
               </td>
             </tr>

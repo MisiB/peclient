@@ -24,6 +24,15 @@
         <div class="mt-3 space-y-3 text-sm">
           <p>{{ activeAction ? actionDescription(activeAction) : '' }}</p>
 
+          <section v-if="activeAction === 'review_approve'" class="rounded-lg border border-base-300 bg-base-200/50 p-3" aria-label="Submission comment">
+            <h4 class="font-semibold">Submitter’s comment</h4>
+            <p v-if="latestSubmission" class="mt-1 text-xs text-base-content/60">
+              {{ latestSubmission.user?.name || 'Plan submitter' }}
+              <span v-if="latestSubmission.created_at"> · {{ new Date(latestSubmission.created_at).toLocaleString() }}</span>
+            </p>
+            <p class="mt-2 whitespace-pre-wrap break-words">{{ latestSubmission?.comment?.trim() || 'No comment was provided with the latest submission.' }}</p>
+          </section>
+
           <fieldset class="fieldset">
             <legend class="fieldset-legend">
               Comment{{ commentRequired ? ' (required)' : ' (optional)' }}
@@ -64,6 +73,10 @@ const submitting = ref(false);
 const SEND_BACK_ACTIONS = new Set(['review_send_back', 'approve_send_back']);
 
 const commentRequired = computed(() => SEND_BACK_ACTIONS.has(activeAction.value));
+const latestSubmission = computed(() => [...(store.transitions ?? [])]
+  .filter(transition => transition.action === 'submit_for_review')
+  .sort((a, b) => Number(b.id) - Number(a.id)
+    || (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0))[0] ?? null);
 
 const analysisClean = computed(() => store.analysisReport?.can_submit === true);
 const analysisHasIssues = computed(

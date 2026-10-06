@@ -98,8 +98,8 @@
                 <td>{{ item.expensecategory || '—' }}</td>
               </tr>
               <tr>
-                <th>Consumption Mode</th>
-                <td>{{ consumptionModeLabel }}</td>
+                <th>Award Type</th>
+                <td>{{ item.award_type === 'FRAMEWORK' ? 'Framework' : 'Award' }}</td>
               </tr>
 
               <!-- Financials -->
@@ -131,6 +131,16 @@
                   </span>
                 </td>
               </tr>
+
+              <template v-if="item.procurement_exemption && item.exemption_grounds?.length">
+                <tr class="bg-base-200/60">
+                  <th colspan="2" class="text-xs uppercase tracking-wide">Approved exemption grounds</th>
+                </tr>
+                <tr v-for="ground in item.exemption_grounds" :key="ground.ground_uuid || ground.ground_id">
+                  <th>{{ ground.type?.name || 'Exemption' }}</th>
+                  <td><p>{{ ground.justification }}</p><dl v-if="Object.keys(ground.approved_terms || {}).length" class="mt-2 grid grid-cols-2 gap-x-3 text-xs text-base-content/60"><template v-for="(value, key) in ground.approved_terms" :key="key"><dt>{{ readable(key) }}</dt><dd>{{ value ?? '—' }}</dd></template></dl></td>
+                </tr>
+              </template>
 
               <!-- Timeline -->
               <tr class="bg-base-200/60">
@@ -217,12 +227,6 @@ const unspscLabel = computed(() => {
   return u.code ? `${u.code} · ${u.name}` : u.name;
 });
 
-const consumptionModeLabel = computed(() => {
-  const m = props.item.consumption_mode;
-  if (m === 'DRILL_DOWN') return 'Drill down';
-  if (m === 'ONCE_OFF') return 'Once off';
-  return '—';
-});
 
 const flags = computed(() => [
   { label: 'Pre-Qualification', value: !!props.item.pre_qualification },
@@ -244,4 +248,6 @@ const formatDate = (v) => {
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString();
 };
+
+const readable = value => String(value || '').replaceAll('_', ' ').toLowerCase().replace(/^\w/, char => char.toUpperCase());
 </script>

@@ -80,7 +80,7 @@ async function load() {
 }
 
 function onSaved() {
-  navigateTo('/dashboard')
+  navigateTo('/tenders')
 }
 
 onMounted(async () => {

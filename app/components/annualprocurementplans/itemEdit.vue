@@ -52,7 +52,7 @@ const props = defineProps({
 const store = useAnnualprocurementplanStore();
 
 const form = ref({});
-const errors = reactive({ description: '', quantity: '', unit_cost: '' });
+const errors = reactive({ description: '', quantity: '', unit_cost: '', award_type: '' });
 const submitting = ref(false);
 
 const toFormShape = (it) => ({
@@ -65,7 +65,6 @@ const toFormShape = (it) => ({
   spoc: !!it.spoc,
   sustainable_procurement: !!it.sustainable_procurement,
   affirmative_procurement: !!it.affirmative_procurement,
-  procurement_exemption: !!it.procurement_exemption,
   eoi_publication_date: it.eoi_publication_date ?? '',
   eoi_closing_date: it.eoi_closing_date ?? '',
   bid_notice_publication_date: it.bid_notice_publication_date ?? '',
@@ -81,7 +80,7 @@ const toFormShape = (it) => ({
   unit_cost: Number(it.unit_cost ?? 0),
   total_cost: it.total_cost != null ? Number(it.total_cost) : null,
   expensecategory: it.expensecategory ?? 'MOOE',
-  consumption_mode: it.consumption_mode ?? 'ONCE_OFF',
+  award_type: it.award_type ?? 'AWARD',
   msds: it.msds ?? '',
   quarter: it.quarter ?? null,
 });
@@ -96,6 +95,7 @@ const handleSubmit = async () => {
   errors.description = '';
   errors.quantity = '';
   errors.unit_cost = '';
+  errors.award_type = '';
   try {
     submitting.value = true;
     const valid = await AnnualprocurementplanItemSchema.validate(form.value, { abortEarly: false });

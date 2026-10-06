@@ -2,6 +2,18 @@ import { defineStore } from 'pinia';
 import { useAnnualprocurementplanHelper } from '~/composables/useAnnualprocurementplanHelper';
 
 export const useAnnualprocurementplanStore = defineStore('annualprocurementplan', () => {
+  const committeeApi = useCommitteeHelper();
+  const attachSavedCommittee = async (planUuid, payload) => {
+    const result = await committeeApi.attach(planUuid, payload);
+    analysisReport.value = null;
+    const refreshMembers = {
+      EVALUATION: fetchCommitteeMembers,
+      DISPOSAL: fetchDisposalCommitteeMembers,
+      PMU: fetchPmuMembers,
+    }[payload.type];
+    await refreshMembers(planUuid, { page: 1 });
+    return result;
+  };
   const items = ref([]);
   const loading = ref(false);
 
@@ -13,19 +25,12 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   const planItemsMeta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 50 });
   const planItemsLoading = ref(false);
 
-  // Plan items split into consolidated groups (rows sharing a reference_no)
-  // and standalone individual rows. Drives the Plan Items tab; consolidated
-  // groups arrive in full, only the individual list is paginated.
-  const groupedConsolidated = ref([]);
-  const groupedIndividual = ref([]);
-  const groupedIndividualMeta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 50 });
-  const groupedItemsLoading = ref(false);
-
   // Aggregates + unresolved summary, cached at the plan level so the totals
   // card and Issues badge stay accurate across paginated views.
   const itemTotals = ref([]);
   const itemTotalsByGroup = ref([]);
   const itemTotalsByFlag = ref([]);
+  const itemTotalsByAwardType = ref([]);
   const unresolvedSummary = ref([]);
 
   // Disposal plan items + their lookup reasons.
@@ -112,8 +117,6 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     updatePlan,
     deletePlan,
     getItems,
-    getGroupedItems,
-    setConsolidationName,
     getComplianceAnalysis,
     startComplianceAnalysis,
     getComplianceChat,
@@ -121,6 +124,7 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     getItemTotals,
     getItemTotalsByGroup,
     getItemTotalsByFlag,
+    getItemTotalsByAwardType,
     createItem,
     updateItem,
     deleteItem,
@@ -181,14 +185,13 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     listSupplements,
     showSupplement,
     createSupplement,
+    updateSupplement,
     deleteSupplement,
     addSupplementItem,
     updateSupplementItem,
     deleteSupplementItem,
     supplementTransition,
     getSupplementWorkflowActions,
-    startImport,
-    getImport,
     getUnresolved,
     resolveLookup,
     getProcurementClasses,
@@ -259,7 +262,6 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     for (const k of flagKeys) {
       if (opts[k]) params[k] = 1;
     }
-    if (opts.consumption_mode) params.consumption_mode = opts.consumption_mode;
     const { data, error } = await getItems(uuid, params);
     if (!error.value) {
       const payload = data.value?.data ?? {};
@@ -276,51 +278,6 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     planItemsLoading.value = false;
   };
 
-  const fetchGroupedItems = async (uuid, opts = {}) => {
-    lastItemsOpts.value = { ...opts };
-    groupedItemsLoading.value = true;
-    const params = {
-      page: opts.page ?? groupedIndividualMeta.value.current_page ?? 1,
-      per_page: opts.per_page ?? groupedIndividualMeta.value.per_page ?? 50,
-    };
-    if (opts.search) params.search = opts.search;
-    const flagKeys = [
-      'pre_qualification', 'eoi', 'spoc',
-      'sustainable_procurement', 'affirmative_procurement', 'procurement_exemption',
-    ];
-    for (const k of flagKeys) {
-      if (opts[k]) params[k] = 1;
-    }
-    if (opts.consumption_mode) params.consumption_mode = opts.consumption_mode;
-    const { data, error } = await getGroupedItems(uuid, params);
-    if (!error.value) {
-      const payload = data.value?.data ?? {};
-      groupedConsolidated.value = payload.consolidated ?? [];
-      const individual = payload.individual ?? {};
-      groupedIndividual.value = individual.data ?? [];
-      groupedIndividualMeta.value = {
-        current_page: individual.current_page ?? 1,
-        last_page: individual.last_page ?? 1,
-        total: individual.total ?? 0,
-        per_page: individual.per_page ?? 50,
-      };
-    } else {
-      showError(error, 'Failed to fetch items.');
-    }
-    groupedItemsLoading.value = false;
-  };
-
-  const renameConsolidation = async (planUuid, referenceNo, name) => {
-    const { status, error } = await setConsolidationName(planUuid, referenceNo, name);
-    if (status?.value) {
-      showSuccess('Saved', 'Consolidation name updated.');
-      await fetchGroupedItems(planUuid, lastItemsOpts.value ?? {});
-      return true;
-    }
-    showError(error, 'Failed to update consolidation name.');
-    return false;
-  };
-
   // Build the query-string params the three totals endpoints accept. Mirrors
   // the filter shape fetchPlanItems uses so the cards always agree with the
   // visible row set.
@@ -332,7 +289,6 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
       'sustainable_procurement', 'affirmative_procurement', 'procurement_exemption',
     ];
     for (const k of flagKeys) if (opts[k]) out[k] = 1;
-    if (opts.consumption_mode) out.consumption_mode = opts.consumption_mode;
     return out;
   };
 
@@ -349,6 +305,11 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   const fetchItemTotalsByFlag = async (uuid, opts = {}) => {
     const { data, error } = await getItemTotalsByFlag(uuid, totalsParams(opts));
     if (!error.value) itemTotalsByFlag.value = data.value?.data ?? [];
+  };
+
+  const fetchItemTotalsByAwardType = async (uuid, opts = {}) => {
+    const { data, error } = await getItemTotalsByAwardType(uuid, totalsParams(opts));
+    if (!error.value) itemTotalsByAwardType.value = data.value?.data ?? [];
   };
 
   const create = async (payload) => {
@@ -392,10 +353,10 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     const opts = lastItemsOpts.value ?? {};
     await Promise.all([
       fetchPlanItems(planUuid, opts),
-      fetchGroupedItems(planUuid, opts),
       fetchItemTotals(planUuid, opts),
       fetchItemTotalsByGroup(planUuid, opts),
       fetchItemTotalsByFlag(planUuid, opts),
+      fetchItemTotalsByAwardType(planUuid, opts),
       fetchUnresolved(planUuid),
       fetchPlan(planUuid), // refresh items_count
     ]);
@@ -899,19 +860,22 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   };
 
   const uploadDocumentForPlan = async (planUuid, documentId, file) => {
-    // Two-step: upload to docman first, then send the returned URL +
-    // metadata to our backend so we never push the file through Laravel.
-    const { uploadFile } = useDocmanUpload();
-    const docmanResult = await uploadFile(file, `annualprocurementplan-documents/${planUuid}`);
-    if (!docmanResult.ok) {
+    const { presignAndUpload } = useS3Upload();
+    const uploadResult = await presignAndUpload(file, `annualprocurementplan-documents/${planUuid}`);
+    if (!uploadResult.ok) {
       showError(
-        ref({ data: { message: docmanResult.error } }),
-        docmanResult.error || 'Failed to upload to document service.',
+        ref({ data: { message: uploadResult.error } }),
+        uploadResult.error || 'Failed to upload attachment to S3.',
       );
       return false;
     }
 
-    const { data: response, status, error } = await uploadPlanDocument(planUuid, documentId, docmanResult.data);
+    const { data: response, status, error } = await uploadPlanDocument(planUuid, documentId, {
+      file_key: uploadResult.key,
+      file_name: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      file_size: file.size,
+    });
     const res = response?.value;
     if (status?.value && res?.status === true) {
       showSuccess('Uploaded', res.message);
@@ -1191,6 +1155,20 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     return false;
   };
 
+  const editSupplement = async (planUuid, uuid, payload) => {
+    const { data: response, status, error } = await updateSupplement(planUuid, uuid, payload);
+    const res = response?.value;
+    if (status?.value && res?.status === true) {
+      showSuccess('Supplement updated', res.message);
+      const refreshCurrent = currentSupplement.value?.uuid === uuid;
+      await fetchSupplements(planUuid, supplementsMeta.value.current_page);
+      if (refreshCurrent) await fetchSupplement(planUuid, uuid);
+      return res.data ?? true;
+    }
+    showError(error || ref({ data: { message: res?.message } }), res?.message || 'Failed to update supplement.');
+    return false;
+  };
+
   const removeSupplement = async (planUuid, uuid) => {
     const { data: response, status, error } = await deleteSupplement(planUuid, uuid);
     const res = response?.value;
@@ -1289,6 +1267,7 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
   };
 
   const fetchTransitions = async (planUuid) => {
+    transitions.value = [];
     const { data, error } = await getTransitions(planUuid);
     if (!error.value) transitions.value = data.value?.data ?? [];
   };
@@ -1332,23 +1311,6 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     }
     showError(error || ref({ data: { message: res?.message } }), 'Failed to import disposal items.');
     return null;
-  };
-
-  // ─── Imports ────────────────────────────────────────────────────────────
-  const beginImport = async (planUuid, file) => {
-    const { data: response, status, error } = await startImport(planUuid, file);
-    const res = response?.value;
-    if (status?.value && res?.status === true) {
-      return res.data ?? null;
-    }
-    showError(error || ref({ data: { message: res?.message } }), 'Failed to start import.');
-    return null;
-  };
-
-  const fetchImport = async (planUuid, importUuid) => {
-    const { data, error } = await getImport(planUuid, importUuid);
-    if (error.value) return null;
-    return data.value?.data ?? null;
   };
 
   const fetchUnresolved = async (planUuid) => {
@@ -1418,19 +1380,17 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     planItems,
     planItemsMeta,
     planItemsLoading,
-    groupedConsolidated,
-    groupedIndividual,
-    groupedIndividualMeta,
-    groupedItemsLoading,
     itemTotals,
     itemTotalsByGroup,
     itemTotalsByFlag,
+    itemTotalsByAwardType,
     unresolvedSummary,
     disposalPlans,
     disposalPlansMeta,
     disposalPlansLoading,
     disposalreasons,
     committeeMembers,
+    attachSavedCommittee,
     committeeMembersMeta,
     committeeMembersLoading,
     currentMember,
@@ -1481,14 +1441,14 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     fetchAll,
     fetchPlan,
     fetchPlanItems,
-    fetchGroupedItems,
-    renameConsolidation,
     fetchItemTotals,
     fetchItemTotalsByGroup,
     fetchItemTotalsByFlag,
+    fetchItemTotalsByAwardType,
     fetchProcurementClasses,
     fetchCurrencies,
     fetchItemLookups,
+    refreshItemViews,
     create,
     update,
     remove,
@@ -1552,6 +1512,7 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     fetchSupplements,
     fetchSupplement,
     addSupplement,
+    editSupplement,
     removeSupplement,
     addSupplementItemAction,
     updateSupplementItemAction,
@@ -1560,8 +1521,6 @@ export const useAnnualprocurementplanStore = defineStore('annualprocurementplan'
     fetchWorkflowActions,
     fetchTransitions,
     runTransition,
-    beginImport,
-    fetchImport,
     fetchUnresolved,
     applyResolveLookup,
   };
